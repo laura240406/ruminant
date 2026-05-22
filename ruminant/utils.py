@@ -9,7 +9,6 @@ from .constants import (
     CXX_OPERATORS,
 )
 from .buf import Buf, _decode
-from .modules import chew
 from .module import debug
 import uuid
 import xml.etree.ElementTree as ET
@@ -22,6 +21,10 @@ import json
 import tempfile
 import re
 import lzma
+
+
+def chew(*args, **kwargs):
+    __import__(".modules").chew(*args, **kwargs)
 
 
 # inner part of xml_to_dict
