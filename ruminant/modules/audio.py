@@ -204,7 +204,10 @@ class ID3v2Module(module.RuminantModule):
             frame = {}
             frame["type"] = self.buf.rs(4)
             # last type is just 4 zero bytes
-            if frame["type"] == "\x00\x00\x00\x00":
+            if frame["type"] == "":
+                break
+
+            if self.buf.unit == 0:
                 break
 
             frame["length"] = self.read_length(bool(flags & 0x80))
@@ -396,6 +399,37 @@ class ID3v2Module(module.RuminantModule):
                         frame["data"]["file-name"] = file_name.decode(encoding)
                         frame["data"]["description"] = description.decode(encoding)
                         frame["data"]["blob"] = chew(content)
+                    case "USLT":
+                        frame["data"] = {}
+                        frame["data"]["encoding"] = {
+                            0: "latin-1",
+                            1: "utf-16",
+                            2: "utf-16be",
+                            3: "utf-8",
+                        }.get(content[0])
+                        frame["data"]["language"] = content[1:3].decode("latin1")
+                        descriptor = b""
+                        content = content[4:]
+
+                        if frame["data"]["encoding"] in ("utf-16", "utf-16be"):
+                            while len(content) and content[:2] != b"\x00\x00":
+                                descriptor += content[:2]
+                                content = content[2:]
+
+                            content = content[2:]
+                        else:
+                            while len(content) and content[0] != b"\x00":
+                                descriptor += content[:1]
+                                content = content[1:]
+
+                            content = content[1:]
+
+                        frame["data"]["content-descriptor"] = descriptor.decode(frame["data"]["encoding"]).rstrip("\x00")
+                        frame["data"]["text"] = content.decode(frame["data"]["encoding"]).rstrip("\x00")
+                    case "UFID":
+                        frame["data"] = {}
+                        frame["data"]["owner-identifier"] = content.split(b"\x00")[0].decode("utf-8")
+                        frame["data"]["identifier"] = content.split(b"\x00")[1].decode("utf-8")
                     case (
                         "TALB"
                         | "TIT1"
@@ -421,6 +455,16 @@ class ID3v2Module(module.RuminantModule):
                         | "TIME"
                         | "TLAN"
                         | "TDAT"
+                        | "TPOS"
+                        | "TDRC"
+                        | "TCMP"
+                        | "TDOR"
+                        | "TMED"
+                        | "TEXT"
+                        | "TSO2"
+                        | "TSOC"
+                        | "TSRC"
+                        | "TSOP"
                     ):
                         frame["data"] = {}
                         frame["data"]["encoding"] = {
