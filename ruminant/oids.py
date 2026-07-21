@@ -1,7 +1,11 @@
 import os
-from . import types
 
-OIDS: types.OidRegistry = {}
+try:
+    from . import ruminant_types
+
+    OIDS: ruminant_types.OidRegistry = {}
+except ImportError:
+    OIDS = {}
 
 # read ruminant/oids.txt
 with open(os.path.join(os.path.dirname(__file__), "oids.txt"), "r") as file:

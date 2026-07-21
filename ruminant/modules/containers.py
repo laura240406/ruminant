@@ -1,5 +1,5 @@
 from . import chew
-from .. import module, utils, constants, secrets, types
+from .. import module, utils, constants, secrets, ruminant_types
 from ..buf import Buf
 
 import tempfile
@@ -256,7 +256,7 @@ class ZipModule(module.RuminantModule):
 
         return K0, K1, K2
 
-    def chew(self) -> types.JSON:
+    def chew(self) -> ruminant_types.JSON:
         meta: dict = {}
         meta["type"] = "zip"
 
@@ -578,7 +578,7 @@ class RIFFModule(module.RuminantModule):
     def identify(buf: Buf, ctx={}) -> bool:
         return buf.peek(4) in (b"RIFF", b"AT&T")
 
-    def chew(self) -> types.JSON:
+    def chew(self) -> ruminant_types.JSON:
         meta: dict = {}
         meta["type"] = {b"RIFF": "riff", b"AT&T": "djvu"}[self.buf.peek(4)]
 
@@ -913,7 +913,7 @@ class TarModule(module.RuminantModule):
     def identify(buf: Buf, ctx={}) -> bool:
         return buf.peek(262)[257:] == b"ustar"
 
-    def chew(self) -> types.JSON:
+    def chew(self) -> ruminant_types.JSON:
         meta: dict = {}
         meta["type"] = "tar"
 
@@ -987,7 +987,7 @@ class ArModule(module.RuminantModule):
     def identify(buf: Buf, ctx={}) -> bool:
         return buf.peek(8) == b"!<arch>\n"
 
-    def chew(self) -> types.JSON:
+    def chew(self) -> ruminant_types.JSON:
         meta: dict = {}
         meta["type"] = "ar"
 
@@ -1024,7 +1024,7 @@ class CpioModule(module.RuminantModule):
     def identify(buf: Buf, ctx={}) -> bool:
         return buf.peek(6) in (b"070701", b"070702")
 
-    def chew(self) -> types.JSON:
+    def chew(self) -> ruminant_types.JSON:
         meta: dict = {}
         meta["type"] = "cpio"
 
@@ -1072,7 +1072,7 @@ class HttpFramedModule(module.RuminantModule):
     def identify(buf: Buf, ctx={}) -> bool:
         return buf.peek(7) == b"--FRAME"
 
-    def chew(self) -> types.JSON:
+    def chew(self) -> ruminant_types.JSON:
         meta: dict = {}
         meta["type"] = "http-frame"
         self.buf.rl()
@@ -1090,7 +1090,7 @@ class JmodModule(module.RuminantModule):
     def identify(buf: Buf, ctx={}) -> bool:
         return buf.peek(4) == b"\x4a\x4d\x01\x00"
 
-    def chew(self) -> types.JSON:
+    def chew(self) -> ruminant_types.JSON:
         meta: dict = {}
         meta["type"] = "jmod"
 
@@ -1132,7 +1132,7 @@ class Uf2Module(module.RuminantModule):
     def identify(buf: Buf, ctx={}) -> bool:
         return buf.peek(8) == b"UF2\nWQ]\x9e"
 
-    def chew(self) -> types.JSON:
+    def chew(self) -> ruminant_types.JSON:
         meta: dict = {}
         meta["type"] = "uf2"
 
@@ -1267,7 +1267,7 @@ class DvdMpegSequenceModule(module.RuminantModule):
     def identify(buf: Buf, ctx={}) -> bool:
         return buf.pu32() == 0x000001ba
 
-    def chew(self) -> types.JSON:
+    def chew(self) -> ruminant_types.JSON:
         meta: dict = {}
         meta["type"] = "mpeg-sequence"
 
@@ -1306,7 +1306,7 @@ class GrubModuleModule(module.RuminantModule):
     def identify(buf: Buf, ctx={}) -> bool:
         return buf.peek(4) == b"mimg"
 
-    def chew(self) -> types.JSON:
+    def chew(self) -> ruminant_types.JSON:
         meta: dict = {}
         meta["type"] = "grub-module"
 
@@ -1367,7 +1367,7 @@ class AndroidBackupModule(module.RuminantModule):
     def identify(buf: Buf, ctx={}) -> bool:
         return buf.peek(15) == b"ANDROID BACKUP\n"
 
-    def chew(self) -> types.JSON:
+    def chew(self) -> ruminant_types.JSON:
         meta: dict = {}
         meta["type"] = "android-backup"
         self.buf.skip(15)
@@ -1413,7 +1413,7 @@ class CabinetModule(module.RuminantModule):
     def identify(buf: Buf, ctx={}) -> bool:
         return buf.peek(4) == b"MSCF"
 
-    def chew(self) -> types.JSON:
+    def chew(self) -> ruminant_types.JSON:
         meta: dict = {}
         meta["type"] = "cab"
 
@@ -1630,7 +1630,7 @@ class IwaModule(module.RuminantModule):
             case _:
                 return obj
 
-    def chew(self) -> types.JSON:
+    def chew(self) -> ruminant_types.JSON:
         meta: dict = {}
         meta["type"] = "iwa"
 
@@ -3156,7 +3156,7 @@ class PcapNgModule(module.RuminantModule):
 
         del self.reassemble[identifier]
 
-    def chew(self) -> types.JSON:
+    def chew(self) -> ruminant_types.JSON:
         meta: dict = {}
         meta["type"] = "pcapng"
 
@@ -3218,7 +3218,7 @@ class PcapNgModule(module.RuminantModule):
                 block["data"] = {}
                 match block["type"]:
                     case "Interface Description":
-                        # https://www.tcpdump.org/linktypes.html
+                        # https://www.tcpdump.org/linkruminant_types.html
                         block["data"]["link-type"] = utils.unraw(
                             self.buf.ru16l() if self.little else self.buf.ru16(),
                             2,
@@ -3539,7 +3539,7 @@ class NcsdModule(module.RuminantModule):
 
         return buf.peek(256 + 4)[256:] == b"NCSD"
 
-    def chew(self) -> types.JSON:
+    def chew(self) -> ruminant_types.JSON:
         # https://www.3dbrew.org/wiki/NCSD
         meta: dict = {}
         meta["type"] = "ncsd"
@@ -3723,7 +3723,7 @@ class NcchModule(module.RuminantModule):
 
         return exefs
 
-    def chew(self) -> types.JSON:
+    def chew(self) -> ruminant_types.JSON:
         # https://www.3dbrew.org/wiki/NCCH#NCCH_Header
         meta: dict = {}
         meta["type"] = "ncch"
@@ -3850,7 +3850,7 @@ class SmdhModule(module.RuminantModule):
     def identify(buf: Buf, ctx={}) -> bool:
         return buf.peek(4) == b"SMDH"
 
-    def chew(self) -> types.JSON:
+    def chew(self) -> ruminant_types.JSON:
         meta: dict = {}
         meta["type"] = "smdh"
 
@@ -3973,7 +3973,7 @@ class DarcModule(module.RuminantModule):
     def identify(buf: Buf, ctx={}) -> bool:
         return buf.peek(4) == b"darc"
 
-    def chew(self) -> types.JSON:
+    def chew(self) -> ruminant_types.JSON:
         meta: dict = {}
         meta["type"] = "darc"
 

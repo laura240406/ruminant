@@ -1,4 +1,4 @@
-from .. import module, utils, constants, types
+from .. import module, utils, constants, ruminant_types
 from ..buf import Buf
 from . import chew
 from typing import cast
@@ -57,7 +57,7 @@ class TrueTypeModule(module.RuminantModule):
 
         return dsig
 
-    def chew(self) -> types.JSON:
+    def chew(self) -> ruminant_types.JSON:
         meta: dict = {}
         meta["type"] = "truetype"
 
@@ -571,7 +571,7 @@ class Woff2Module(module.RuminantModule):
     def identify(buf: Buf, ctx={}) -> bool:
         return buf.peek(4) == b"wOF2"
 
-    def chew(self) -> types.JSON:
+    def chew(self) -> ruminant_types.JSON:
         meta: dict = {}
         meta["type"] = "woff2"
 

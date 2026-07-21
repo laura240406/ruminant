@@ -1,7 +1,7 @@
 import uuid
 import struct
 import datetime
-from .. import module, utils, types
+from .. import module, utils, ruminant_types
 from ..buf import Buf
 from . import chew
 
@@ -24,7 +24,7 @@ class IsoModule(module.RuminantModule):
     def identify(buf: Buf, ctx={}) -> bool:
         return buf.peek(8)[4:] in (b"ftyp", b"styp", b"jP  ", b"jumb")
 
-    def chew(self) -> types.JSON:
+    def chew(self) -> ruminant_types.JSON:
         meta: dict = {}
 
         self.mode = None
@@ -1910,7 +1910,7 @@ class MatroskaModule(module.RuminantModule):
     def identify(buf: Buf, ctx={}) -> bool:
         return buf.peek(4) == b"\x1a\x45\xdf\xa3"
 
-    def chew(self) -> types.JSON:
+    def chew(self) -> ruminant_types.JSON:
         meta: dict = {}
         meta["type"] = "matroska"
 
@@ -2033,7 +2033,7 @@ class OggModule(module.RuminantModule):
     def identify(buf: Buf, ctx={}) -> bool:
         return buf.peek(4) == b"OggS"
 
-    def chew(self) -> types.JSON:
+    def chew(self) -> ruminant_types.JSON:
         meta: dict = {}
         meta["type"] = "ogg"
 
@@ -2374,7 +2374,7 @@ class MpegTsModule(module.RuminantModule):
 
         return chunk
 
-    def chew(self) -> types.JSON:
+    def chew(self) -> ruminant_types.JSON:
         meta: dict = {}
         meta["type"] = "mpeg-ts"
         meta["chunks"] = []
@@ -2791,7 +2791,7 @@ class AsfModule(module.RuminantModule):
 
         return obj
 
-    def chew(self) -> types.JSON:
+    def chew(self) -> ruminant_types.JSON:
         meta: dict = {}
         meta["type"] = "asf"
 
@@ -3064,7 +3064,7 @@ class SwfModule(module.RuminantModule):
 
         return tags
 
-    def chew(self) -> types.JSON:
+    def chew(self) -> ruminant_types.JSON:
         meta: dict = {}
         meta["type"] = "swf"
 
@@ -3108,7 +3108,7 @@ class DuckIvfModule(module.RuminantModule):
     def identify(buf: Buf, ctx={}) -> bool:
         return buf.peek(4) == b"DKIF"
 
-    def chew(self) -> types.JSON:
+    def chew(self) -> ruminant_types.JSON:
         meta: dict = {}
         meta["type"] = "duck-ivf"
 
@@ -3143,7 +3143,7 @@ class DiracModule(module.RuminantModule):
     def identify(buf: Buf, ctx={}) -> bool:
         return buf.peek(4) == b"BBCD"
 
-    def chew(self) -> types.JSON:
+    def chew(self) -> ruminant_types.JSON:
         meta: dict = {}
         meta["type"] = "dirac"
 

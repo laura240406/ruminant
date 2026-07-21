@@ -1,4 +1,4 @@
-from .. import module, utils, constants, types
+from .. import module, utils, constants, ruminant_types
 from ..buf import Buf
 from . import chew
 import time
@@ -51,7 +51,7 @@ class WasmModule(module.RuminantModule):
 
         return [self.read_element(short) for i in range(0, count)]
 
-    def chew(self) -> types.JSON:
+    def chew(self) -> ruminant_types.JSON:
         meta: dict = {}
         meta["type"] = "wasm"
 
@@ -864,7 +864,7 @@ class JavaClassModule(module.RuminantModule):
 
             target["attributes"][key] = val
 
-    def chew(self) -> types.JSON:
+    def chew(self) -> ruminant_types.JSON:
         meta: dict = {}
         self.meta = meta
 
@@ -1099,7 +1099,7 @@ class ElfModule(module.RuminantModule):
     def hex(self, val):
         return {"raw": val, "hex": "0x" + hex(val)[2:].zfill(16 if self.wide else 8)}
 
-    def chew(self) -> types.JSON:
+    def chew(self) -> ruminant_types.JSON:
         meta: dict = {}
         meta["type"] = "elf"
 
@@ -1893,7 +1893,7 @@ class PeModule(module.RuminantModule):
 
         return tbl
 
-    def chew(self) -> types.JSON:
+    def chew(self) -> ruminant_types.JSON:
         meta: dict = {}
         meta["type"] = "pe"
 
@@ -2481,7 +2481,7 @@ class SpirVModule(module.RuminantModule):
 
         return val
 
-    def chew(self) -> types.JSON:
+    def chew(self) -> ruminant_types.JSON:
         meta: dict = {}
         meta["type"] = "spir-v"
 
@@ -2743,7 +2743,7 @@ class PycModule(module.RuminantModule):
 
             return buf.ru32() < int(time.time()) + (60 * 60 * 24 * 365 * 10)
 
-    def chew(self) -> types.JSON:
+    def chew(self) -> ruminant_types.JSON:
         meta: dict = {}
         meta["type"] = "pyc"
 
@@ -2774,7 +2774,7 @@ class IntelFlashModule(module.RuminantModule):
 
         return buf.peek(20)[16:20] == b"\x5a\xa5\xf0\x0f"
 
-    def chew(self) -> types.JSON:
+    def chew(self) -> ruminant_types.JSON:
         meta: dict = {}
         meta["type"] = "intel-flash"
 
@@ -2882,7 +2882,7 @@ class IntelMicrocodeModule(module.RuminantModule):
     def valid_bcd(val):
         return (val & 0x0f) < 10 and (val >> 4) < 10
 
-    def chew(self) -> types.JSON:
+    def chew(self) -> ruminant_types.JSON:
         meta: dict = {}
         meta["type"] = "intel-microcode"
 
@@ -2977,7 +2977,7 @@ class AOutExecutableModule(module.RuminantModule):
     def identify(buf: Buf, ctx={}) -> bool:
         return buf.pu16l() in (0x0107, 0x0108, 0x010b)
 
-    def chew(self) -> types.JSON:
+    def chew(self) -> ruminant_types.JSON:
         meta: dict = {}
         meta["type"] = "a.out"
 
@@ -3072,7 +3072,7 @@ class DexModule(module.RuminantModule):
             except Exception:
                 return False
 
-    def chew(self) -> types.JSON:
+    def chew(self) -> ruminant_types.JSON:
         meta: dict = {}
         meta["type"] = "dex"
 

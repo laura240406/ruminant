@@ -1,4 +1,4 @@
-from .. import module, utils, types
+from .. import module, utils, ruminant_types
 from ..buf import Buf
 from . import chew
 import zlib
@@ -13,7 +13,7 @@ class FlacModule(module.RuminantModule):
     def identify(buf: Buf, ctx={}) -> bool:
         return buf.peek(4) == b"fLaC"
 
-    def chew(self) -> types.JSON:
+    def chew(self) -> ruminant_types.JSON:
         meta: dict = {}
         meta["type"] = "flac"
 
@@ -142,7 +142,7 @@ class ID3v2Module(module.RuminantModule):
         else:
             return self.buf.ru32()
 
-    def chew(self) -> types.JSON:
+    def chew(self) -> ruminant_types.JSON:
         self.force = False
 
         bak = self.buf.backup()
@@ -156,7 +156,7 @@ class ID3v2Module(module.RuminantModule):
             return self._chew()
 
     # actual chew()
-    def _chew(self) -> types.JSON:
+    def _chew(self) -> ruminant_types.JSON:
         meta: dict = {}
         meta["type"] = "id3v2"
 
@@ -513,7 +513,7 @@ class Mp3Module(module.RuminantModule):
 
         return False
 
-    def chew(self) -> types.JSON:
+    def chew(self) -> ruminant_types.JSON:
         meta: dict = {}
         meta["type"] = "mp3"
 
@@ -778,7 +778,7 @@ class MidiModule(module.RuminantModule):
     def identify(buf: Buf, ctx={}) -> bool:
         return buf.peek(4) == b"MThd"
 
-    def chew(self) -> types.JSON:
+    def chew(self) -> ruminant_types.JSON:
         meta: dict = {}
         meta["type"] = "midi"
 

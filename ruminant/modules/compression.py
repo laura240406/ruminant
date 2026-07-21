@@ -1,4 +1,4 @@
-from .. import module, utils, types
+from .. import module, utils, ruminant_types
 from ..buf import Buf
 from . import chew
 
@@ -18,7 +18,7 @@ class GzipModule(module.RuminantModule):
     def identify(buf: Buf, ctx={}) -> bool:
         return buf.peek(2) == b"\x1f\x8b"
 
-    def chew(self) -> types.JSON:
+    def chew(self) -> ruminant_types.JSON:
         meta: dict = {}
         meta["type"] = "gzip"
 
@@ -139,7 +139,7 @@ class Bzip2Module(module.RuminantModule):
     def identify(buf: Buf, ctx={}) -> bool:
         return buf.peek(2) == b"BZ"
 
-    def chew(self) -> types.JSON:
+    def chew(self) -> ruminant_types.JSON:
         meta: dict = {}
         meta["type"] = "bzip2"
 
@@ -161,7 +161,7 @@ class ZstdModule(module.RuminantModule):
     def identify(buf: Buf, ctx={}) -> bool:
         return buf.peek(4) == b"\x28\xb5\x2f\xfd"
 
-    def chew(self) -> types.JSON:
+    def chew(self) -> ruminant_types.JSON:
         meta: dict = {}
         meta["type"] = "zstd"
 
@@ -267,7 +267,7 @@ class ZlibModule(module.RuminantModule):
     def identify(buf: Buf, ctx={}) -> bool:
         return buf.peek(2) in (b"\x78\x01", b"\x78\x5e", b"\x78\x9c", b"\x78\xda")
 
-    def chew(self) -> types.JSON:
+    def chew(self) -> ruminant_types.JSON:
         meta: dict = {}
         meta["type"] = "zlib"
         meta["compression-type"] = utils.unraw(
@@ -293,7 +293,7 @@ class XzModule(module.RuminantModule):
     def identify(buf: Buf, ctx={}) -> bool:
         return buf.peek(6) == b"\xfd7zXZ\x00"
 
-    def chew(self) -> types.JSON:
+    def chew(self) -> ruminant_types.JSON:
         meta: dict = {}
         meta["type"] = "xz"
 

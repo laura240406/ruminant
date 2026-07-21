@@ -1,4 +1,4 @@
-from .. import module, utils, constants, types
+from .. import module, utils, constants, ruminant_types
 from ..buf import Buf
 from . import chew
 import tempfile
@@ -38,7 +38,7 @@ class TorrentModule(module.RuminantModule):
             except Exception:
                 return False
 
-    def chew(self) -> types.JSON:
+    def chew(self) -> ruminant_types.JSON:
         meta: dict = {}
         meta["type"] = "magnet"
 
@@ -55,7 +55,7 @@ class Sqlite3Module(module.RuminantModule):
     def identify(buf: Buf, ctx={}) -> bool:
         return buf.peek(16) == b"SQLite format 3\x00"
 
-    def chew(self) -> types.JSON:
+    def chew(self) -> ruminant_types.JSON:
         meta: dict = {}
         meta["type"] = "sqlite3"
 
@@ -138,7 +138,7 @@ class NbtModule(module.RuminantModule):
             for elem in root:
                 self.parse(elem)
 
-    def chew(self) -> types.JSON:
+    def chew(self) -> ruminant_types.JSON:
         meta: dict = {}
         meta["type"] = "nbt"
 
@@ -199,7 +199,7 @@ class McaModule(module.RuminantModule):
 
         return False
 
-    def chew(self) -> types.JSON:
+    def chew(self) -> ruminant_types.JSON:
         meta: dict = {}
         meta["type"] = "mca"
 
@@ -296,7 +296,7 @@ class BlendModule(module.RuminantModule):
     def rptrh(self):
         return hex(self.rptr())[2:].zfill(8 if "32" in self.mode else 16)
 
-    def chew(self) -> types.JSON:
+    def chew(self) -> ruminant_types.JSON:
         meta: dict = {}
         meta["type"] = "blend"
         self.buf.skip(7)
@@ -380,7 +380,7 @@ class GitModule(module.RuminantModule):
         except Exception:
             return False
 
-    def chew(self) -> types.JSON:
+    def chew(self) -> ruminant_types.JSON:
         meta: dict = {}
         meta["type"] = "git"
 
@@ -529,7 +529,7 @@ class OpenTimestampsProofModule(module.RuminantModule):
 
         return root
 
-    def chew(self) -> types.JSON:
+    def chew(self) -> ruminant_types.JSON:
         meta: dict = {}
         meta["type"] = "opentimestamps-proof"
 
@@ -737,7 +737,7 @@ class JavaSerializationData(module.RuminantModule):
 
         return obj
 
-    def chew(self) -> types.JSON:
+    def chew(self) -> ruminant_types.JSON:
         meta: dict = {}
         meta["type"] = "java-serialization"
 
@@ -777,7 +777,7 @@ class SafeTensorsModule(module.RuminantModule):
     def identify(buf: Buf, ctx={}) -> bool:
         return buf.pu64l() < buf.available() and buf.peek(10)[8:] == b'{"'
 
-    def chew(self) -> types.JSON:
+    def chew(self) -> ruminant_types.JSON:
         meta: dict = {}
         meta["type"] = "safetensors"
 
@@ -848,7 +848,7 @@ class GgufModule(module.RuminantModule):
     def rs(self):
         return self.buf.rs(self.buf.ru64l() if self.little else self.buf.ru64())
 
-    def chew(self) -> types.JSON:
+    def chew(self) -> ruminant_types.JSON:
         meta: dict = {}
         meta["type"] = "GGUF"
 
@@ -1316,7 +1316,7 @@ class AcpiModule(module.RuminantModule):
 
         return tbl
 
-    def chew(self) -> types.JSON:
+    def chew(self) -> ruminant_types.JSON:
         meta: dict = {}
         meta["type"] = "acpi"
 
@@ -1424,7 +1424,7 @@ class BplistModule(module.RuminantModule):
             case _:
                 return obj.get("value")
 
-    def chew(self) -> types.JSON:
+    def chew(self) -> ruminant_types.JSON:
         meta: dict = {}
         meta["type"] = "bplist"
 
@@ -1559,7 +1559,7 @@ class OsmPbfFormat(module.RuminantModule):
                 return False
         return True
 
-    def chew(self) -> types.JSON:
+    def chew(self) -> ruminant_types.JSON:
         meta: dict = {}
         meta["type"] = "osm-pbf"
 
@@ -1744,7 +1744,7 @@ class StlModule(module.RuminantModule):
         except Exception:
             return False
 
-    def chew(self) -> types.JSON:
+    def chew(self) -> ruminant_types.JSON:
         meta: dict = {}
         meta["type"] = "stl"
 

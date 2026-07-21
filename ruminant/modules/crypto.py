@@ -1,4 +1,4 @@
-from .. import module, utils, secrets, crypto, types
+from .. import module, utils, secrets, crypto, ruminant_types
 from ..buf import Buf
 from ..constants import AGE_DRAND_CHAINS
 from . import chew
@@ -19,7 +19,7 @@ class DerModule(module.RuminantModule):
     def identify(buf: Buf, ctx={}) -> bool:
         return buf.pu8() == 0x30 and (buf.pu16() & 0xf0) in (0x80, 0x30)
 
-    def chew(self) -> types.JSON:
+    def chew(self) -> ruminant_types.JSON:
         meta: dict = {}
         meta["type"] = "der"
 
@@ -51,7 +51,7 @@ class PemModule(module.RuminantModule):
             or buf.peek(37) == b"-----BEGIN ENCRYPTED PRIVATE KEY-----"
         )
 
-    def chew(self) -> types.JSON:
+    def chew(self) -> ruminant_types.JSON:
         meta: dict = {}
         meta["type"] = "pem"
 
@@ -84,7 +84,7 @@ class PgpModule(module.RuminantModule):
 
         return buf.peek(15) == b"-----BEGIN PGP "
 
-    def chew(self) -> types.JSON:
+    def chew(self) -> ruminant_types.JSON:
         meta: dict = {}
         meta["type"] = "pgp"
 
@@ -161,7 +161,7 @@ class KdbxModule(module.RuminantModule):
         for child in document.get("children", ()):
             self.walk_document(child, f)
 
-    def chew(self) -> types.JSON:
+    def chew(self) -> ruminant_types.JSON:
         meta: dict = {}
         meta["type"] = "kdbx"
 
@@ -504,7 +504,7 @@ class AgeModule(module.RuminantModule):
     def identify(buf: Buf, ctx={}) -> bool:
         return buf.peek(34) == b"-----BEGIN AGE ENCRYPTED FILE-----" or buf.peek(20) == b"age-encryption.org/v"
 
-    def chew(self) -> types.JSON:
+    def chew(self) -> ruminant_types.JSON:
         meta: dict = {}
         meta["type"] = "age"
 
@@ -707,7 +707,7 @@ class LuksModule(module.RuminantModule):
     def identify(buf: Buf, ctx={}) -> bool:
         return buf.peek(6) == b"LUKS\xba\xbe"
 
-    def chew(self) -> types.JSON:
+    def chew(self) -> ruminant_types.JSON:
         meta: dict = {}
         meta["type"] = "luks"
 
@@ -835,7 +835,7 @@ class SshSignatureModule(module.RuminantModule):
 
         return buf.rs(self.ibuf.ru32())
 
-    def chew(self) -> types.JSON:
+    def chew(self) -> ruminant_types.JSON:
         meta: dict = {}
         meta["type"] = "ssh-signature"
 
@@ -894,7 +894,7 @@ class OpenSshPrivateKeyModule(module.RuminantModule):
 
         return buf.rs(self.ibuf.ru32())
 
-    def chew(self) -> types.JSON:
+    def chew(self) -> ruminant_types.JSON:
         meta: dict = {}
         meta["type"] = "openssh-private-key"
 
@@ -952,7 +952,7 @@ class EfiSignatureListModule(module.RuminantModule):
             buf.skip(4)
             return buf.available() > 16 and buf.pguid() in EfiSignatureListModule.GUIDS
 
-    def chew(self) -> types.JSON:
+    def chew(self) -> ruminant_types.JSON:
         meta: dict = {}
         meta["type"] = "efi-signature-list"
 

@@ -1,4 +1,4 @@
-from .. import module, utils, types
+from .. import module, utils, ruminant_types
 from ..buf import Buf
 from . import chew
 import json
@@ -22,7 +22,7 @@ class Utf8Module(module.RuminantModule):
         except Exception:
             return False
 
-    def chew(self) -> types.JSON:
+    def chew(self) -> ruminant_types.JSON:
         meta: dict = {}
         meta["type"] = "text"
 
@@ -85,7 +85,7 @@ class EmptyModule(module.RuminantModule):
     def identify(buf: Buf, ctx={}) -> bool:
         return buf.available() == 0
 
-    def chew(self) -> types.JSON:
+    def chew(self) -> ruminant_types.JSON:
         return {"type": "empty"}
 
 
@@ -107,7 +107,7 @@ class ZeroesModule(module.RuminantModule):
 
         return True
 
-    def chew(self) -> types.JSON:
+    def chew(self) -> ruminant_types.JSON:
         self.buf.skip(self.buf.available())
         return {"type": "zeroes"}
 
@@ -200,7 +200,7 @@ class AndroidXmlModule(module.RuminantModule):
 
         return chunk
 
-    def chew(self) -> types.JSON:
+    def chew(self) -> ruminant_types.JSON:
         meta: dict = {}
         meta["type"] = "android-xml"
 

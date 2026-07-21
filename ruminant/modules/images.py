@@ -1,5 +1,5 @@
 from . import chew
-from .. import module, utils, constants, types
+from .. import module, utils, constants, ruminant_types
 from ..buf import Buf
 import zlib
 import datetime
@@ -297,7 +297,7 @@ class IRBModule(module.RuminantModule):
 
         return desc, True
 
-    def chew(self) -> types.JSON:
+    def chew(self) -> ruminant_types.JSON:
         meta: dict = {}
         meta["type"] = "irb"
         meta["data"] = {}
@@ -782,7 +782,7 @@ class ICCProfileModule(module.RuminantModule):
 
         return tag
 
-    def chew(self) -> types.JSON:
+    def chew(self) -> ruminant_types.JSON:
         meta: dict = {}
         meta["type"] = "icc-profile"
         meta["data"] = {}
@@ -975,7 +975,7 @@ class JPEGModule(module.RuminantModule):
     def identify(buf: Buf, ctx={}) -> bool:
         return buf.peek(3) == b"\xff\xd8\xff"
 
-    def chew(self) -> types.JSON:
+    def chew(self) -> ruminant_types.JSON:
         meta: dict = {}
         meta["type"] = "jpeg"
 
@@ -1263,7 +1263,7 @@ class PNGModule(module.RuminantModule):
     def identify(buf: Buf, ctx={}) -> bool:
         return buf.peek(8) == b"\x89PNG\r\n\x1a\n"
 
-    def chew(self) -> types.JSON:
+    def chew(self) -> ruminant_types.JSON:
         meta: dict = {}
         meta["type"] = "png"
 
@@ -2001,7 +2001,7 @@ class TIFFModule(module.RuminantModule):
             b"SONY DSC",
         )
 
-    def chew(self) -> types.JSON:
+    def chew(self) -> ruminant_types.JSON:
         meta: dict = {}
         meta["type"] = "tiff"
 
@@ -2255,7 +2255,7 @@ class GifModule(module.RuminantModule):
     def identify(buf: Buf, ctx={}) -> bool:
         return buf.peek(3) == b"GIF"
 
-    def chew(self) -> types.JSON:
+    def chew(self) -> ruminant_types.JSON:
         meta: dict = {}
         meta["type"] = "gif"
 
@@ -2396,7 +2396,7 @@ class HdrpMakernoteModule(module.RuminantModule):
     def identify(buf: Buf, ctx={}) -> bool:
         return buf.peek(4) == b"HDRP"
 
-    def chew(self) -> types.JSON:
+    def chew(self) -> ruminant_types.JSON:
         meta: dict = {}
         meta["type"] = "hdrp-makernote"
 
@@ -2440,7 +2440,7 @@ class PsdModule(IRBModule):
     def identify(buf: Buf, ctx={}) -> bool:
         return buf.peek(4) == b"8BPS"
 
-    def chew(self) -> types.JSON:
+    def chew(self) -> ruminant_types.JSON:
         meta: dict = {}
         meta["type"] = "psd"
 
@@ -2657,7 +2657,7 @@ class JpegXlModule(module.RuminantModule):
         else:
             return self.buf.rbl(d) + o
 
-    def chew(self) -> types.JSON:
+    def chew(self) -> ruminant_types.JSON:
         meta: dict = {}
         meta["type"] = "jpeg-xl"
 
@@ -2813,7 +2813,11 @@ class DicomModule(module.RuminantModule):
                         self.buf.setunit(0)
                         break
 
-                    tag["value"].append(self.read_dataset())
+                    try:
+                        tag["value"].append(self.read_dataset())
+                    except Exception:
+                        self.buf.setunit(0)
+                        break
             case "list":
                 tag["value"] = []
                 while self.buf.unit > 0:
@@ -2822,13 +2826,19 @@ class DicomModule(module.RuminantModule):
                         self.buf.setunit(0)
                         break
 
-                    tag["value"].append(self.read_dataset())
+                    try:
+                        tag["value"].append(self.read_dataset())
+                    except Exception:
+                        self.buf.setunit(0)
+                        break
             case "FD":
                 tag["value"] = self.buf.rf64l() if self.little else self.buf.rf64()
             case "SL":
                 tag["value"] = self.buf.ri64l() if self.little else self.buf.ri64()
             case "US":
                 tag["value"] = self.buf.ru16l() if self.little else self.buf.ru16()
+            case "SS":
+                tag["value"] = self.buf.ri16l() if self.little else self.buf.ri16()
             case _:
                 raise ValueError(f"Unknown VR {vr}, {tag}")
 
@@ -2852,7 +2862,7 @@ class DicomModule(module.RuminantModule):
 
         return tag
 
-    def chew(self) -> types.JSON:
+    def chew(self) -> ruminant_types.JSON:
         meta: dict = {}
         meta["type"] = "dicom"
 
@@ -2864,7 +2874,10 @@ class DicomModule(module.RuminantModule):
 
         meta["tags"] = []
         while self.buf.available() > 0:
-            meta["tags"].append(self.read_dataset())
+            try:
+                meta["tags"].append(self.read_dataset())
+            except Exception:
+                break
 
         self.buf.skip(self.buf.available())
 
@@ -2879,7 +2892,7 @@ class ExrModule(module.RuminantModule):
     def identify(buf: Buf, ctx={}) -> bool:
         return buf.peek(4) == b"v/1\x01"
 
-    def chew(self) -> types.JSON:
+    def chew(self) -> ruminant_types.JSON:
         meta: dict = {}
         meta["type"] = "exr"
 
@@ -3029,7 +3042,7 @@ class IcoModule(module.RuminantModule):
 
         return True
 
-    def chew(self) -> types.JSON:
+    def chew(self) -> ruminant_types.JSON:
         meta: dict = {}
         meta["type"] = "ico"
 
@@ -3313,7 +3326,7 @@ class XcfModule(module.RuminantModule):
 
         return properties
 
-    def chew(self) -> types.JSON:
+    def chew(self) -> ruminant_types.JSON:
         # https://developer.gimp.org/core/standards/xcf/#the-image-structure
         meta: dict = {}
         meta["type"] = "xcf"
@@ -3398,7 +3411,7 @@ class QoiModule(module.RuminantModule):
     def identify(buf: Buf, ctx={}) -> bool:
         return buf.peek(4) == b"qoif"
 
-    def chew(self) -> types.JSON:
+    def chew(self) -> ruminant_types.JSON:
         meta: dict = {}
         meta["type"] = "qoi"
 

@@ -1,4 +1,4 @@
-from .. import module, utils, types
+from .. import module, utils, ruminant_types
 from ..buf import Buf
 from . import chew
 
@@ -33,7 +33,7 @@ class VbmetaModule(module.RuminantModule):
 
         return key
 
-    def chew(self) -> types.JSON:
+    def chew(self) -> ruminant_types.JSON:
         meta: dict = {}
         meta["type"] = "vbmeta"
 
@@ -222,7 +222,7 @@ class AndroidBootImgModule(module.RuminantModule):
     def hex(self, v):
         return {"raw": v, "hex": hex(v)}
 
-    def chew(self) -> types.JSON:
+    def chew(self) -> ruminant_types.JSON:
         meta: dict = {}
         meta["type"] = "android-bootimg"
 

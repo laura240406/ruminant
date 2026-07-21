@@ -1,4 +1,4 @@
-from .. import module, utils, constants, types
+from .. import module, utils, constants, ruminant_types
 from ..buf import Buf
 from . import chew
 import zlib
@@ -18,7 +18,7 @@ class BtrfsModule(module.RuminantModule):
             buf.seek(0x10040)
             return buf.peek(8) == b"_BHRfS_M"
 
-    def chew(self) -> types.JSON:
+    def chew(self) -> ruminant_types.JSON:
         meta: dict = {}
         meta["type"] = "btrfs"
 
@@ -149,7 +149,7 @@ class MbrGptModule(module.RuminantModule):
 
         return gpt
 
-    def chew(self) -> types.JSON:
+    def chew(self) -> ruminant_types.JSON:
         meta: dict = {}
         meta["type"] = "mbr-gpt"
 
@@ -277,7 +277,7 @@ class BtrfsSteamModule(module.RuminantModule):
     def identify(buf: Buf, ctx={}) -> bool:
         return buf.peek(13) == b"btrfs-stream\x00"
 
-    def chew(self) -> types.JSON:
+    def chew(self) -> ruminant_types.JSON:
         meta: dict = {}
         meta["type"] = "btrfs-stream"
 

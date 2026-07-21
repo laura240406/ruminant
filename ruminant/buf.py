@@ -3,7 +3,7 @@ import struct
 import uuid
 import tempfile
 from typing import Any, Self
-from . import types
+from . import ruminant_types
 
 
 class SubWrapper(object):
@@ -53,8 +53,8 @@ class Buf(object):
         self.unit: int | None = None
         self.resetunit()
         self._target: int = self._size
-        self._stack: types.BufStack = []
-        self._backup: list[types.BufBackup] = []
+        self._stack: ruminant_types.BufStack = []
+        self._backup: list[ruminant_types.BufBackup] = []
         self._bits: int = 0
 
     @classmethod
@@ -164,7 +164,7 @@ class Buf(object):
     def hasunit(self) -> bool:
         return (self.unit > 0) if self.unit is not None else self.available() > 0
 
-    def backup(self) -> types.BufBackup:
+    def backup(self) -> ruminant_types.BufBackup:
         """Return the entire internal state."""
         return (
             self.unit,
@@ -176,7 +176,7 @@ class Buf(object):
             self._bits,
         )
 
-    def restore(self, bak: types.BufBackup) -> None:
+    def restore(self, bak: ruminant_types.BufBackup) -> None:
         """Restore the entire internal state."""
         (
             self.unit,
