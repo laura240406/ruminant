@@ -457,6 +457,8 @@
 1.2.840.113583.1.1: security
 1.2.840.113583.1.1.5: AuthenticDocumentsTrust
 1.2.840.113583.1.1.8: revocationInfoArchival
+1.2.840.113619: General Electric (GE) HealthCare (formerly, GE Medical Systems, GE Yokogawa Medical Systems (YMS), GE Vingmed Ultrasound, GE, GE Healthcare)
+1.2.840.113619.2: Images encoded according to the Digital Imaging and COmmunications in Medicine (DICOM) standard
 1.2.840.113628: canadian-national-railways
 1.2.840.113635: apple
 1.2.840.114021: identrus-llc
@@ -867,6 +869,8 @@
 1.3.6.1.4.1.25054.3.7: carillonCommercialLicense
 1.3.6.1.4.1.25054.3.7.1: carillonExtKeyUsageLicenseSigning
 1.3.6.1.4.1.25054.3.8: carillonCommercialSecret
+1.3.6.1.4.1.30071: Colby Dillion
+1.3.6.1.4.1.30071.8: Clara Deploy SDK
 1.3.6.1.4.1.34697: entrust-limited
 1.3.6.1.4.1.34697.2: premium-ev
 1.3.6.1.4.1.34697.2.1: AffirmTrust EV policy
