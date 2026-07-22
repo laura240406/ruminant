@@ -2770,13 +2770,24 @@ class DicomModule(module.RuminantModule):
                 if ver == (2, 1):
                     tag["value"] = self.buf.ru16()
                 else:
+                    if tag["tag"] == "(7fe0,0010)":
+                        while self.buf.peek(4) == b"\xfe\xff\x00\xe0":
+                            self.buf.skip(8)
+
                     with self.buf.subunit():
                         tag["value"] = chew(self.buf)
-            case "UI" | "SH" | "CS" | "DA" | "TM" | "LO" | "PN" | "IS" | "UT" | "AE" | "ST" | "AS" | "DS" | "LT":
+            case "UI" | "SH" | "CS" | "DA" | "TM" | "LO" | "PN" | "IS" | "UT" | "AE" | "ST" | "AS" | "DS" | "LT" | "DT":
                 tag["value"] = self.buf.rs(self.buf.unit)
 
                 if vr == "DA":
                     tag["value"] = datetime.datetime.strptime(tag["value"], "%Y%m%d").strftime("%Y-%m-%d")
+                elif vr == "DT":
+                    try:
+                        tag["value"] = datetime.datetime.strptime(tag["value"], "%Y%m%d%H%M%S.%f%z").strftime(
+                            "%Y-%m-%d %H:%M:%S"
+                        )
+                    except ValueError:
+                        tag["value"] = datetime.datetime.strptime(tag["value"], "%Y%m%d%H%M%S").strftime("%Y-%m-%d %H:%M:%S")
                 elif vr == "TM":
                     if "." in tag["value"]:
                         main, frac = tag["value"].split(".", 1)
@@ -2857,7 +2868,8 @@ class DicomModule(module.RuminantModule):
                         self.explicit = True
                         self.little = False
                     case _:
-                        raise ValueError(f"Unknown mode {tag['value']['raw']}")
+                        self.explicit = True
+                        self.little = True
 
         self.buf.skipunit()
         self.buf.popunit()

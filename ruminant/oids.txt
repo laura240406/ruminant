@@ -80,6 +80,11 @@
 1.2.643.2.2: cryptopro
 1.2.752: se
 1.2.752.34: seis
+1.2.826: gb
+1.2.826.0: national
+1.2.826.0.1: eng-ltd
+1.2.826.0.1.3680043: Medical Connections
+1.2.826.0.1.3680043.8: Organizations or individuals using Digital Imaging and COmmunications in Medicine (DICOM)
 1.2.840: us
 1.2.840.10008: dicom
 1.2.840.10008.1: Digital Imaging and COmmunications in Medicine (DICOM) application contexts
