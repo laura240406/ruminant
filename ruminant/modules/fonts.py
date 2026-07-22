@@ -562,6 +562,11 @@ class TrueTypeModule(module.RuminantModule):
                         table["data"] = self.read_dsig()
                     case "Wasm":
                         table["data"] = chew(self.buf.readunit())
+                    case "FFTM":
+                        table["data"]["version"] = self.buf.ru32()
+                        table["data"]["fontforge-timestamp"] = utils.mp4_time_to_iso(self.buf.ru64())
+                        table["data"]["creation-timestamp"] = utils.mp4_time_to_iso(self.buf.ru64())
+                        table["data"]["modification-timestamp"] = utils.mp4_time_to_iso(self.buf.ru64())
                     case "glyf" | "hmtx" | "loca" | "GDEF" | "GPOS" | "GSUB" | "hdmx" | "VDMX" | "JSTF" | "LTSH":
                         # not really parsable as it's the raw glyph data
                         pass
