@@ -3348,6 +3348,8 @@ DICOM_NAMES = {
     "(0018,a001)": "Contributing Equipment Sequence",
     "(0018,a002)": "Contribution DateTime",
     "(0018,a003)": "Contribution Description",
+    "(0019,0010)": "Private Creator",
+    "(0019,105a)": "Acquisition Duration",
     "(0020,000d)": "Study Instance UID",
     "(0020,000e)": "Series Instance UID",
     "(0020,0010)": "Study ID",

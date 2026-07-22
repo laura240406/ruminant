@@ -31,13 +31,17 @@ def _decode(content: bytes, encoding: str = "utf-8") -> str:
         return content.decode("latin-1")
 
 
+class UnitException(Exception):
+    pass
+
+
 class Buf(object):
     def __init__(self, source: Any):
         if (
             isinstance(source, io.IOBase)  # file-esque object
             or isinstance(source, tempfile._TemporaryFileWrapper)  # tempfile wrappers are not files???
             or hasattr(source, "_buf_magic")  # dirty hack for CryptoBuf
-            or source.__class__.__name__ in ("mmap")  # mmap'ed files are also not files???
+            or source.__class__.__name__ in ("mmap",)  # mmap'ed files are also not files???
         ):
             self._file = source
         else:
@@ -99,7 +103,8 @@ class Buf(object):
 
     def _checkunit(self):
         """Check whether the unit constraint is satisfied."""
-        assert self.unit >= 0, f"unit overread by {-self.unit} byte{'s' if self.unit != -1 else ''}"
+        if self.unit < 0:
+            raise UnitException(f"unit overread by {-self.unit} byte{'s' if self.unit != -1 else ''}")
 
     def setunit(self, length: int) -> None:
         """Set the unit to the span from the cursor to the cursors + length."""

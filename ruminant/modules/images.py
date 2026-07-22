@@ -1,6 +1,6 @@
 from . import chew
 from .. import module, utils, constants, ruminant_types
-from ..buf import Buf
+from ..buf import Buf, UnitException
 import zlib
 import datetime
 import gzip
@@ -2772,7 +2772,7 @@ class DicomModule(module.RuminantModule):
                 else:
                     with self.buf.subunit():
                         tag["value"] = chew(self.buf)
-            case "UI" | "SH" | "CS" | "DA" | "TM" | "LO" | "PN" | "IS" | "UT" | "AE" | "ST" | "AS" | "DS":
+            case "UI" | "SH" | "CS" | "DA" | "TM" | "LO" | "PN" | "IS" | "UT" | "AE" | "ST" | "AS" | "DS" | "LT":
                 tag["value"] = self.buf.rs(self.buf.unit)
 
                 if vr == "DA":
@@ -2815,7 +2815,7 @@ class DicomModule(module.RuminantModule):
 
                     try:
                         tag["value"].append(self.read_dataset())
-                    except Exception:
+                    except UnitException:
                         self.buf.setunit(0)
                         break
             case "list":
@@ -2828,11 +2828,13 @@ class DicomModule(module.RuminantModule):
 
                     try:
                         tag["value"].append(self.read_dataset())
-                    except Exception:
+                    except UnitException:
                         self.buf.setunit(0)
                         break
             case "FD":
                 tag["value"] = self.buf.rf64l() if self.little else self.buf.rf64()
+            case "FL":
+                tag["value"] = self.buf.rf32l() if self.little else self.buf.rf32()
             case "SL":
                 tag["value"] = self.buf.ri64l() if self.little else self.buf.ri64()
             case "US":
@@ -2876,7 +2878,7 @@ class DicomModule(module.RuminantModule):
         while self.buf.available() > 0:
             try:
                 meta["tags"].append(self.read_dataset())
-            except Exception:
+            except UnitException:
                 break
 
         self.buf.skip(self.buf.available())
