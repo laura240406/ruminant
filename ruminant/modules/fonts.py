@@ -10,7 +10,29 @@ class TrueTypeModule(module.RuminantModule):
 
     @staticmethod
     def identify(buf: Buf, ctx={}) -> bool:
-        return buf.peek(5) in (b"\x00\x01\x00\x00\x00", b"OTTO\x00")
+        size = buf.available()
+
+        if size < 12:
+            return False
+
+        if buf.peek(4) not in (b"\x00\x01\x00\x00", b"OTTO"):
+            return False
+
+        with buf:
+            buf.skip(4)
+            table_count = buf.ru16()
+            buf.skip(6)
+
+            if buf.available() < table_count * 16:
+                return False
+
+            for i in range(0, table_count):
+                buf.skip(8)
+
+                if buf.ru32() + buf.ru32() > size:
+                    return False
+
+        return True
 
     def read_dsig(self):
         dsig = {}
