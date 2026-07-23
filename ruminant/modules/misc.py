@@ -1770,3 +1770,111 @@ class StlModule(module.RuminantModule):
         meta["bounding-box"] = [minv, maxv]
 
         return meta
+
+
+@module.register
+class AppleDoubleModule(module.RuminantModule):
+    desc = "AppleDouble files."
+
+    @staticmethod
+    def identify(buf: Buf, ctx={}) -> bool:
+        return buf.peek(4) == b"\x00\x05\x16\x07"
+
+    def chew(self) -> ruminant_types.JSON:
+        # https://datatracker.ietf.org/doc/html/rfc1740#appendix-B
+        meta: dict = {}
+        meta["type"] = "apple-double"
+
+        self.buf.skip(4)
+
+        meta["version"] = f"{self.buf.ru16()}.{self.buf.ru16()}"
+        meta["filler"] = self.buf.rs(16)
+        meta["entry-count"] = self.buf.ru16()
+
+        meta["entries"] = []
+        for i in range(0, meta["entry-count"]):
+            entry: dict = {}
+            entry["id"] = self.buf.ru32()
+            entry["offset"] = self.buf.ru32()
+            entry["length"] = self.buf.ru32()
+            entry["data"] = {}
+
+            meta["entries"].append(entry)
+
+        max_offset = self.buf.tell()
+
+        if self.buf.peek(38)[34:] == b"ATTR":
+            self.buf.skip(38)
+            meta["debug-tag"] = self.buf.ru32()
+            meta["total-size"] = self.buf.ru32()
+            max_offset = max(max_offset, meta["total-size"])
+            meta["data-offset"] = self.buf.ru32()
+            meta["data-length"] = self.buf.ru32()
+            meta["reserved"] = self.buf.rh(12)
+            meta["flags"] = self.buf.ru16()
+            meta["attribute-count"] = self.buf.ru16()
+
+            meta["attributes"] = []
+            for i in range(0, meta["attribute-count"]):
+                attr = {}
+                attr["offset"] = self.buf.ru32()
+                attr["length"] = self.buf.ru32()
+                attr["flags"] = self.buf.ru16()
+                attr["name"] = self.buf.rs(self.buf.ru8())
+
+                with self.buf:
+                    self.buf.seek(attr["offset"])
+                    attr["payload"] = self.buf.rs(attr["length"])
+
+                meta["attributes"].append(attr)
+
+        for entry in meta["entries"]:
+            self.buf.seek(entry["offset"])
+            self.buf.pasunit(entry["length"])
+
+            match entry["id"]:
+                case 2:
+                    entry["id"] = "Resource"
+                    entry["data"]["payload"] = self.buf.rh(self.buf.unit)
+                case 9:
+                    entry["id"] = "Finder Info"
+                    entry["data"]["type"] = self.buf.rs(4)
+                    entry["data"]["creator"] = self.buf.rs(4)
+                    flags = self.buf.ru16()
+                    entry["data"]["flags"] = utils.unpack_flags(
+                        flags,
+                        (
+                            (0, "on-desktop"),
+                            (5, "switch-launch"),
+                            (6, "shared"),
+                            (7, "no-inits"),
+                            (8, "been-inited"),
+                            (10, "custom-icon"),
+                            (11, "stationary"),
+                            (12, "name-locked"),
+                            (13, "has-bundle"),
+                            (14, "invisible"),
+                            (15, "alias"),
+                        ),
+                    )
+                    entry["data"]["color"] = (flags >> 1) & 0b111
+                    entry["data"]["position"] = [self.buf.ru16() for i in range(0, 2)]
+                    entry["data"]["folder"] = self.buf.ru16()
+                    entry["data"]["icon-id"] = self.buf.ru16()
+                    entry["data"]["unused"] = [self.buf.ru16() for i in range(0, 3)]
+                    entry["data"]["script"] = self.buf.ri8()
+                    entry["data"]["xflags"] = self.buf.ri8()
+                    entry["data"]["comment"] = self.buf.ru16()
+                    entry["data"]["put-away"] = self.buf.ru32()
+                case _:
+                    entry["id"] = f"Unknown (0x{hex(entry['id'])[2:].zfill(8)})"
+                    entry["unknown"] = True
+
+            self.buf.sapunit()
+
+        for entry in meta["entries"]:
+            max_offset = max(max_offset, entry["offset"] + entry["length"])
+
+        self.buf.seek(max_offset)
+
+        return meta
