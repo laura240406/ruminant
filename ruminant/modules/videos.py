@@ -1295,7 +1295,7 @@ class IsoModule(module.RuminantModule):
         elif typ in ("hint", "cdsc", "font", "hind", "vdep", "vplx", "subt", "cdep"):
             atom["data"]["track-id"] = self.buf.ru32()
         # video sample boxes
-        elif typ in ("avc1", "hvc1", "vp09", "encv", "av01", "hev1", "vvc1", "h263"):
+        elif typ in ("avc1", "hvc1", "vp09", "encv", "av01", "hev1", "vvc1", "h263", "mp4v"):
             atom["data"]["reserved1"] = self.buf.rh(6)
             atom["data"]["data_reference_index"] = self.buf.ru16()
             atom["data"]["pre-defined1"] = self.buf.rh(2)
