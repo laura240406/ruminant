@@ -1502,6 +1502,12 @@ class IsoModule(module.RuminantModule):
                 self.buf.seek(sample_to_offset[0])
                 with self.buf.sub(sample_sizes[0]):
                     data["first-sample"] = chew(self.buf)
+            case "tx3g":
+                data["text"] = []
+                for i in range(0, min(len(sample_to_offset), 16)):
+                    self.buf.seek(sample_to_offset[i])
+                    with self.buf.sub(sample_sizes[i]):
+                        data["text"].append(self.buf.rs(self.buf.ru16()))
             case _:
                 self.buf.seek(sample_to_offset[0])
                 with self.buf.sub(sample_sizes[0]):
