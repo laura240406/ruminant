@@ -1286,6 +1286,84 @@ class IsoModule(module.RuminantModule):
             atom["data"]["projection-bounds-bottom"] = self.buf.ru32()
             atom["data"]["projection-bounds-left"] = self.buf.ru32()
             atom["data"]["projection-bounds-right"] = self.buf.ru32()
+        elif typ == "vvcC":
+            self.read_version(atom)
+            atom["data"]["reserved1"] = self.buf.rb(5)
+            atom["data"]["length-size-minus-one"] = self.buf.rb(2)
+            atom["data"]["ptl-present"] = self.buf.rb(1)
+
+            if atom["data"]["ptl-present"]:
+                atom["data"]["ols-idx"] = self.buf.rb(9)
+                atom["data"]["sublayers-count"] = self.buf.rb(3)
+                atom["data"]["constant-frame-rate"] = self.buf.rb(2)
+                atom["data"]["chroma-format-idc"] = self.buf.rb(2)
+                atom["data"]["bit-depth-minus-eight"] = self.buf.rb(3)
+                atom["data"]["reserved2"] = self.buf.rb(5)
+                atom["data"]["general-profile-idc"] = self.buf.rb(7)
+                atom["data"]["general-tier-flag"] = self.buf.rb(1)
+                atom["data"]["general-level-idc"] = self.buf.rb(8)
+                atom["data"]["ptl-frame-only-constraint-flag"] = self.buf.rb(1)
+                atom["data"]["ptl-multi-layer-enabled-flag"] = self.buf.rb(1)
+                atom["data"]["general-constraint-info-bytes"] = self.buf.rb(6)
+                atom["data"]["general-constraint-info"] = self.buf.rh(atom["data"]["general-constraint-info-bytes"])
+
+                if atom["data"]["sublayers-count"] > 1:
+                    temp = self.buf.rb(atom["data"]["sublayers-count"] - 1)
+                    self.buf.align()
+                    atom["data"]["ptl-sublayer-level-present-flag"] = temp
+                    atom["data"]["sublayer-level-idc"] = self.buf.rh(temp.bit_count())
+
+                atom["data"]["ptl-sub-profile-count"] = self.buf.ru8()
+                atom["data"]["ptl-sub-profiles"] = self.buf.rh(atom["data"]["ptl-sub-profile-count"] * 4)
+
+            atom["data"]["max-picture-width"] = self.buf.ru16()
+            atom["data"]["max-picture-height"] = self.buf.ru16()
+            atom["data"]["avg-frame-rate"] = self.buf.ru16() / 256
+
+            atom["data"]["array-count"] = self.buf.ru8()
+            atom["data"]["arrays"] = []
+            for i in range(0, atom["data"]["array-count"]):
+                array = {}
+                array["completeness"] = self.buf.rb(1)
+                array["reserved"] = self.buf.rb(2)
+                array["type"] = utils.unraw(self.buf.rb(5), 1, {0x0f: "SPS_NUT", 0x10: "PPS_NUT"}, True)
+
+                array["nalu-count"] = self.buf.ru16()
+                array["nalus"] = []
+                for i in range(0, array["nalu-count"]):
+                    nalu = {}
+                    nalu["length"] = self.buf.ru16()
+
+                    self.buf.pasunit(nalu["length"])
+
+                    nalu["forbidden-zero-bit"] = self.buf.rb(1)
+                    nalu["nuh-reserved-zero-bit"] = self.buf.rb(1)
+                    nalu["nuh-layer-id"] = self.buf.rb(6)
+                    nalu["type"] = utils.unraw(self.buf.rb(5), 1, {0x0f: "SPS_NUT", 0x10: "PPS_NUT"}, True)
+                    nalu["nuh-temporal-id-plus-one"] = self.buf.rb(3)
+
+                    nalu["payload"] = {}
+                    match nalu["type"]:
+                        case "PPS_NUT":
+                            nalu["payload"] = {}
+                            nalu["payload"]["pps-pic-parameter-set-id"] = self.buf.rb(6)
+                            nalu["payload"]["pps-seq-parameter-set-id"] = self.buf.rb(4)
+                            nalu["payload"]["pps-mixed-nalu-types-in-pic-flag"] = self.buf.rb(1)
+                            nalu["payload"]["pps-pic-width-in-luma-samples"] = self.buf.rue()
+                            nalu["payload"]["pps-pic-height-in-luma-samples"] = self.buf.rue()
+                            nalu["payload"]["pps-conformance-window-flag"] = self.buf.rb(1)
+
+                            # TODO
+                            self.buf.align()
+                        case _:
+                            nalu["payload"] = self.buf.rh(self.buf.unit)
+                            nalu["unknown"] = True
+
+                    self.buf.sapunit()
+
+                    array["nalus"].append(nalu)
+
+                atom["data"]["arrays"].append(array)
         elif typ[0] == "©" or typ in ("iods", "SDLN", "smrd"):
             if typ[:2] == "©T" and self.buf.pu16() == self.buf.unit - 4:
                 length = self.buf.ru16()
