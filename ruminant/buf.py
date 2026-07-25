@@ -276,6 +276,10 @@ class Buf(object):
         """Read a 32-bit unsigned big-endian integer."""
         return int.from_bytes(self.read(4), "big")
 
+    def ru48(self) -> int:
+        """Read a 48-bit unsigned big-endian integer."""
+        return int.from_bytes(self.read(6), "big")
+
     def ru64(self) -> int:
         """Read a 64-bit unsigned big-endian integer."""
         return int.from_bytes(self.read(8), "big")
@@ -411,6 +415,10 @@ class Buf(object):
     def pu32(self) -> int:
         """Peek a 32-bit unsigned big-endian integer."""
         return int.from_bytes(self.peek(4), "big")
+
+    def pu48(self) -> int:
+        """Peek a 48-bit unsigned big-endian integer."""
+        return int.from_bytes(self.peek(6), "big")
 
     def pu64(self) -> int:
         """Peek a 64-bit unsigned big-endian integer."""

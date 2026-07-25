@@ -37,7 +37,10 @@ class IsoModule(module.RuminantModule):
         try:
             with self.buf:
                 meta["streams"] = self.parse_mdat(meta["atoms"])
-        except Exception:
+        except Exception as e:
+            if module.debug:
+                raise e
+
             pass
 
         return meta
@@ -484,7 +487,7 @@ class IsoModule(module.RuminantModule):
             atom["data"]["general-profile-idc"] = self.buf.rb(5)
 
             atom["data"]["profile-compatibility-flags"] = self.buf.ru32()
-            atom["data"]["constraint-indicator-flags"] = self.buf.ru24()
+            atom["data"]["constraint-indicator-flags"] = self.buf.ru48()
             atom["data"]["level-idc"] = self.buf.ru8()
             atom["data"]["min-spatial-segmentation-idc"] = self.buf.ru16()
             atom["data"]["parallelism-type"] = self.buf.ru8()
@@ -1498,16 +1501,38 @@ class IsoModule(module.RuminantModule):
                     data["obus"].append(self.read_av1_obu())
 
                 self.buf.sapunit()
-            case "mp4a" | "mp4v" | "drac":
-                self.buf.seek(sample_to_offset[0])
-                with self.buf.sub(sample_sizes[0]):
-                    data["first-sample"] = chew(self.buf)
             case "tx3g":
                 data["text"] = []
                 for i in range(0, min(len(sample_to_offset), 16)):
                     self.buf.seek(sample_to_offset[i])
                     with self.buf.sub(sample_sizes[i]):
                         data["text"].append(self.buf.rs(self.buf.ru16()))
+            case "hev1":
+                self.buf.seek(sample_to_offset[0])
+                self.buf.pasunit(sample_sizes[0])
+
+                hvcC = self.get_all(codec["data"]["atoms"], "hvcC")[0]
+                nal_length_size = (hvcC["data"]["length-size-minus-one"] & 0x03) + 1
+                data["nal-length-size"] = nal_length_size
+
+                data["first-sample-nals"] = []
+                while self.buf.unit > 0:
+                    nalu = {}
+                    nalu["length"] = int.from_bytes(self.buf.read(nal_length_size), "big")
+
+                    self.buf.pasunit(nalu["length"])
+
+                    nalu["payload"] = self.read_h265_nalu()
+
+                    self.buf.sapunit()
+
+                    data["first-sample-nals"].append(nalu)
+
+                self.buf.sapunit()
+            case "mp4a" | "mp4v" | "drac":
+                self.buf.seek(sample_to_offset[0])
+                with self.buf.sub(sample_sizes[0]):
+                    data["first-sample"] = chew(self.buf)
             case _:
                 self.buf.seek(sample_to_offset[0])
                 with self.buf.sub(sample_sizes[0]):
@@ -1783,6 +1808,68 @@ class IsoModule(module.RuminantModule):
         self.buf.sapunit()
 
         return obu
+
+    def read_h265_nalu(self):
+        nal = {}
+        nal["forbidden-zero-bit"] = self.buf.rb(1)
+        nal["unit-type"] = utils.unraw(
+            self.buf.rb(6),
+            1,
+            {0x27: "Prefix SEI"},
+            True,
+        )
+        nal["nuh-layer-id"] = self.buf.rb(6)
+        nal["nuh-temporal-id-plus-one"] = self.buf.rb(3)
+
+        match nal["unit-type"]:
+            case "Prefix SEI":
+                nal["seis"] = []
+
+                while self.buf.unit > 1:
+                    typ = 0
+                    while True:
+                        part = self.buf.ru8()
+                        typ += part
+
+                        if part != 0xff:
+                            break
+
+                    length = 0
+                    while True:
+                        part = self.buf.ru8()
+                        length += part
+
+                        if part != 0xff:
+                            break
+
+                    sei = {}
+                    sei["type"] = utils.unraw(typ, 1, {0x05: "user_data_unregistered"}, True)
+                    sei["length"] = length
+
+                    buf = Buf(
+                        self.buf
+                        .read(length)
+                        .replace(b"\x00\x00\x03\x00", b"\x00\x00\x00")
+                        .replace(b"\x00\x00\x03\x01", b"\x00\x00\x01")
+                        .replace(b"\x00\x00\x03\x02", b"\x00\x00\x02")
+                        .replace(b"\x00\x00\x03\x03", b"\x00\x00\x03")
+                    )
+
+                    match sei["type"]:
+                        case "user_data_unregistered":
+                            sei["uuid"] = buf.ruuid()
+
+                            match sei["uuid"]:
+                                case "2ca2de09-b517-47db-bb55-a4fe7fc2fc4e":
+                                    sei["string"] = buf.rs(buf.available())
+                                case _:
+                                    sei["payload"] = buf.rh(buf.available())
+
+                    nal["seis"].append(sei)
+            case _:
+                nal["unknown"] = True
+
+        return nal
 
 
 @module.register
