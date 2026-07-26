@@ -528,68 +528,7 @@ class IsoModule(module.RuminantModule):
 
                     self.buf.pasunit(entry["nalu-length"])
 
-                    entry["nalu"] = {}
-                    entry["nalu"]["forbidden-zero-bit"] = self.buf.rb(1)
-                    entry["nalu"]["nal-unit-type"] = utils.unraw(
-                        self.buf.rb(6),
-                        1,
-                        {
-                            0x20: "VPS",
-                            0x21: "SPS",
-                            0x22: "PPS",
-                            0x27: "Prefix SEI",
-                            0x28: "Suffix SEI",
-                        },
-                        True,
-                    )
-                    entry["nalu"]["nuh-layer-id"] = self.buf.rb(6)
-                    entry["nalu"]["nuh-temporal-id-plus-1"] = self.buf.rb(3)
-
-                    match entry["nalu"]["nal-unit-type"]:
-                        case "Prefix SEI":
-                            vals = []
-                            for i in range(0, 2):
-                                val = 0
-                                while True:
-                                    c = self.buf.ru8()
-                                    val += c
-
-                                    if c != 0xff:
-                                        break
-
-                                vals.append(val)
-
-                            entry["nalu"]["payload-type"] = utils.unraw(
-                                vals[0],
-                                4,
-                                {
-                                    0x00: "buffering-period",
-                                    0x01: "pic-timing",
-                                    0x05: "user-data-unregistered",
-                                    0x89: "mastering-display-colour-volume",
-                                    0x90: "content-light-level-info",
-                                },
-                                True,
-                            )
-                            entry["nalu"]["payload-size"] = vals[1]
-
-                            self.buf.pasunit(entry["nalu"]["payload-size"])
-
-                            match entry["nalu"]["payload-type"]:
-                                case "user-data-unregistered":
-                                    if self.buf.ph(16) == "2ca2de09b51747dbbb55a4fe7fc2fc4e":
-                                        entry["nalu"]["libx265-uuid"] = self.buf.ruuid()
-                                        entry["nalu"]["libx265-string"] = self.buf.rs(self.buf.unit)
-                                    else:
-                                        entry["nalu"]["payload"] = self.buf.rh(self.buf.unit)
-                                case _:
-                                    entry["nalu"]["payload"] = self.buf.rh(self.buf.unit)
-                                    entry["unknown"] = True
-
-                            self.buf.sapunit()
-                        case _:
-                            entry["nalu"]["payload"] = self.buf.rh(self.buf.unit)
-                            entry["unknown"] = True
+                    entry["nalu"] = self.read_h265_nalu()
 
                     self.buf.sapunit()
 
@@ -1585,7 +1524,7 @@ class IsoModule(module.RuminantModule):
                     self.buf.seek(sample_to_offset[i])
                     with self.buf.sub(sample_sizes[i]):
                         data["text"].append(self.buf.rs(self.buf.ru16()))
-            case "hev1":
+            case "hev1" | "hvc1":
                 self.buf.seek(sample_to_offset[0])
                 self.buf.pasunit(sample_sizes[0])
 
@@ -1893,7 +1832,7 @@ class IsoModule(module.RuminantModule):
         nal["unit-type"] = utils.unraw(
             self.buf.rb(6),
             1,
-            {0x27: "Prefix SEI"},
+            {0x20: "VPS", 0x21: "SPS", 0x22: "PPS", 0x27: "Prefix SEI", 0x28: "Suffix SEI"},
             True,
         )
         nal["nuh-layer-id"] = self.buf.rb(6)
