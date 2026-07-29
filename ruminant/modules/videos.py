@@ -4,6 +4,7 @@ import datetime
 from .. import module, utils, ruminant_types
 from ..buf import Buf
 from . import chew
+from typing import cast
 
 
 def mp4_decode_language(lang_bytes):
@@ -2163,11 +2164,16 @@ class MatroskaModule(module.RuminantModule):
         streams: list[dict] = []
         tracks = self.get(segment, ["Tracks", "TrackEntry"])
 
+        codec_privates = {}
         for track in tracks:
             streams.append({
                 "id": self.get(track, ["TrackNumber"])[0]["data"],
                 "codec": self.get(track, ["CodecID"])[0]["data"],
             })
+
+            codec_private = self.get(track, ["CodecPrivate"])[0]
+            self.buf.seek(codec_private["data-offset"])
+            codec_privates[self.get(track, ["TrackNumber"])[0]["data"]] = codec_private
 
         blocks = []
         sample_offsets: dict[int, list[int]] = {}
@@ -2246,8 +2252,72 @@ class MatroskaModule(module.RuminantModule):
             self.buf.seek(sample_offsets[stream["id"]][0])
             self.buf.pasunit(sample_sizes[stream["id"]][0])
 
-            with self.buf.subunit():
-                stream["blob"] = chew(self.buf, blob_mode=True)
+            match stream["codec"]:
+                case "V_MPEG4/ISO/AVC":
+                    with self.buf:
+                        self.buf.seek(codec_privates[stream["id"]]["data-offset"])
+                        self.buf.pasunit(
+                            codec_privates[stream["id"]]["length"]
+                            - (codec_privates[stream["id"]]["data-offset"] - codec_privates[stream["id"]]["offset"])
+                        )
+
+                        parsed: dict = {}
+                        parsed["configuration-version"] = self.buf.ru8()
+                        parsed["avc-profile-indication"] = self.buf.ru8()
+                        parsed["profile-compatibility"] = self.buf.ru8()
+                        parsed["avc-level-indication"] = self.buf.ru8()
+                        parsed["reserved1"] = self.buf.rb(6)
+                        parsed["length-size-minus-one"] = self.buf.rb(2)
+                        parsed["reserved2"] = self.buf.rb(3)
+                        parsed["sequence-parameter-set-count"] = self.buf.rb(5)
+
+                        parsed["sequence-parameter-sets"] = []
+                        for i in range(0, parsed["sequence-parameter-set-count"]):
+                            self.buf.pasunit(self.buf.ru16())
+                            parsed["sequence-parameter-sets"].append(IsoModule.read_h264_nalu(cast(IsoModule, self)))
+                            self.buf.sapunit()
+
+                        parsed["picture-parameter-set-count"] = self.buf.ru8()
+                        parsed["picture-parameter-sets"] = []
+                        for i in range(0, parsed["picture-parameter-set-count"]):
+                            self.buf.pasunit(self.buf.ru16())
+                            parsed["picture-parameter-sets"].append(IsoModule.read_h264_nalu(cast(IsoModule, self)))
+                            self.buf.sapunit()
+
+                        if (
+                            parsed["avc-profile-indication"] in (100, 110, 122, 244, 44, 83, 86, 118, 128, 138, 139, 134, 135)
+                            and self.buf.hasunit()
+                        ):
+                            parsed["reserved3"] = self.buf.rb(6)
+                            parsed["chroma-format-idc"] = self.buf.rb(2)
+                            parsed["reserved4"] = self.buf.rb(5)
+                            parsed["bit-depth-luma-minus-eight"] = self.buf.rb(3)
+                            parsed["reserved5"] = self.buf.rb(5)
+                            parsed["bit-depth-chroma-minus-eight"] = self.buf.rb(3)
+                            parsed["sequence-parameter-set-ext-count"] = self.buf.rb(5)
+
+                            parsed["sequence-parameter-ext-sets"] = []
+                            for i in range(0, parsed["sequence-parameter-set-ext-count"]):
+                                self.buf.pasunit(self.buf.ru16())
+                                parsed["sequence-parameter-ext-sets"].append(IsoModule.read_h264_nalu(cast(IsoModule, self)))
+                                self.buf.sapunit()
+
+                        codec_privates[stream["id"]]["parsed"] = parsed
+                        self.buf.sapunit()
+
+                    nal_length_size = parsed["length-size-minus-one"] + 1
+                    stream["first-sample-nals"] = []
+                    while self.buf.hasunit():
+                        nalu = {}
+                        nalu["length"] = int.from_bytes(self.buf.read(nal_length_size), "big")
+
+                        self.buf.pasunit(nalu["length"])
+
+                        nalu["payload"] = IsoModule.read_h264_nalu(cast(IsoModule, self), slim=True)
+
+                        self.buf.sapunit()
+
+                        stream["first-sample-nals"].append(nalu)
 
             self.buf.sapunit()
 
