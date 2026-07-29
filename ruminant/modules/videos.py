@@ -2028,9 +2028,14 @@ class MatroskaModule(module.RuminantModule):
         while self.buf.available():
             meta["tags"].append(self.read_tag())
 
+        with self.buf:
+            meta["streams"] = []
+            for segment in self.get(meta, ["Segment"]):
+                meta["streams"].append(self.process_segment(segment))
+
         return meta
 
-    def read_vint(self, m=True):
+    def read_vint(self, m=True, signed=False):
         val = self.buf.ru8()
 
         mask = 0x80
@@ -2048,15 +2053,20 @@ class MatroskaModule(module.RuminantModule):
             val <<= 8
             val |= self.buf.ru8()
 
+        if signed:
+            val -= (2 ** (7 * length - 1)) - 1
+
         return val
 
-    def read_tag(self):
+    def read_tag(self, internal=False):
+        offset = self.buf.tell()
         tag_id = self.read_vint(False)
         tag_length = self.read_vint()
 
         tag = {}
         tag["name"], tag["type"] = self.FIELDS.get(tag_id, (f"Unknown ({hex(tag_id)})", "unknown"))
 
+        tag["offset"] = offset
         tag["length"] = tag_length
 
         self.buf.pushunit()
@@ -2086,14 +2096,15 @@ class MatroskaModule(module.RuminantModule):
                     datetime.datetime(2001, 1, 1, tzinfo=datetime.timezone.utc)
                     + datetime.timedelta(microseconds=int.from_bytes(self.buf.readunit(), "big", signed=True) / 1000)
                 ).isoformat()
-            case "master":
-                if tag_length == 0:
-                    self.buf.popunit()
-                    self.buf.pushunit()
+            case "master" | "skipped-master":
+                if internal or tag["type"] == "master":
+                    if tag_length == 0:
+                        self.buf.popunit()
+                        self.buf.pushunit()
 
-                tag["data"] = []
-                while self.buf.unit > 0:
-                    tag["data"].append(self.read_tag())
+                    tag["data"] = []
+                    while self.buf.unit > 0:
+                        tag["data"].append(self.read_tag())
             case "hex":
                 tag["data"] = self.buf.rh(tag_length)
             case "uuid":
@@ -2128,11 +2139,119 @@ class MatroskaModule(module.RuminantModule):
                     tag["data"] = []
                     while self.buf.unit > 0:
                         tag["data"].append(self.read_tag())
+            case "binary":
+                tag["data-offset"] = self.buf.tell()
 
         self.buf.skipunit()
         self.buf.popunit()
 
         return tag
+
+    @staticmethod
+    def get(root: dict, path: list[str]) -> list[dict]:
+        if len(path) == 0:
+            return [root]
+
+        tags: list[dict] = []
+        for tag in root["data" if "data" in root else "tags"]:
+            if tag["name"] == path[0]:
+                tags += MatroskaModule.get(tag, path[1:])
+
+        return tags
+
+    def process_segment(self, segment: dict) -> list[dict]:
+        streams: list[dict] = []
+        tracks = self.get(segment, ["Tracks", "TrackEntry"])
+
+        for track in tracks:
+            streams.append({
+                "id": self.get(track, ["TrackNumber"])[0]["data"],
+                "codec": self.get(track, ["CodecID"])[0]["data"],
+            })
+
+        blocks = []
+        sample_offsets: dict[int, list[int]] = {}
+        sample_sizes: dict[int, list[int]] = {}
+
+        for stream in streams:
+            sample_offsets[stream["id"]] = []
+            sample_sizes[stream["id"]] = []
+
+        for cluster in self.get(segment, ["Cluster"]):
+            self.buf.seek(cluster["offset"])
+
+            cluster = self.read_tag(True)
+            blocks += self.get(cluster, ["SimpleBlock"]) + self.get(cluster, ["BlockGroup", "SimpleBlock"])
+
+        for block in blocks:
+            self.buf.seek(block["data-offset"])
+            self.buf.pasunit(block["length"] - (block["data-offset"] - block["offset"]))
+
+            track_id = self.read_vint()
+            self.buf.skip(2)
+            lacing = (self.buf.ru8() & 0x06) >> 1
+
+            match lacing:
+                case 0b00:
+                    sample_offsets[track_id].append(self.buf.tell())
+                    sample_sizes[track_id].append(self.buf.unit if self.buf.unit is not None else 0)
+                case 0b01:
+                    count = self.buf.ru8() + 1
+                    size = self.buf.unit // count if self.buf.unit is not None else 0
+
+                    for i in range(0, count):
+                        sample_offsets[track_id].append(self.buf.tell())
+                        sample_sizes[track_id].append(size)
+                        self.buf.skip(size)
+                case 0b10:
+                    count = self.buf.ru8() + 1
+
+                    for i in range(0, count - 1):
+                        size = 0
+                        while True:
+                            c = self.buf.ru8()
+                            size += c
+
+                            if c != 0xff:
+                                break
+
+                        sample_offsets[track_id].append(self.buf.tell())
+                        sample_sizes[track_id].append(size)
+                        self.buf.skip(size)
+
+                    sample_offsets[track_id].append(self.buf.tell())
+                    sample_sizes[track_id].append(self.buf.unit if self.buf.unit is not None else 0)
+                case 0b11:
+                    count = self.buf.ru8() + 1
+
+                    last_size = None
+                    for i in range(0, count - 1):
+                        size = self.buf.read_vint(signed=True)
+
+                        if last_size is not None:
+                            size += last_size
+
+                        last_size = size
+
+                        sample_offsets[track_id].append(self.buf.tell())
+                        sample_sizes[track_id].append(size)
+                        self.buf.skip(size)
+
+                    sample_offsets[track_id].append(self.buf.tell())
+                    sample_sizes[track_id].append(self.buf.unit if self.buf.unit is not None else 0)
+
+            self.buf.sapunit()
+
+        for stream in streams:
+            self.buf.seek(sample_offsets[stream["id"]][0])
+            self.buf.pasunit(sample_sizes[stream["id"]][0])
+
+            with self.buf.subunit():
+                stream["blob"] = chew(self.buf, blob_mode=True)
+
+            self.buf.sapunit()
+
+        return streams
 
 
 @module.register
