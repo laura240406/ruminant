@@ -2697,6 +2697,9 @@ class MatroskaModule(module.RuminantModule):
                     stream["first-sample-obus"] = []
                     while self.buf.hasunit():
                         stream["first-sample-obus"].append(MediaParser.read_av1_obu(self.buf))
+                case "V_DIRAC":
+                    with self.buf.subunit():
+                        stream["first-sample"] = chew(self.buf)
                 case _:
                     if stream["id"] in codec_privates:
                         with self.buf:
