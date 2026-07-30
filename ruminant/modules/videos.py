@@ -4,7 +4,6 @@ import datetime
 from .. import module, utils, ruminant_types
 from ..buf import Buf
 from . import chew
-from typing import cast
 
 
 def mp4_decode_language(lang_bytes):
@@ -15,6 +14,349 @@ def mp4_decode_language(lang_bytes):
     c3 = (lang_code & 0x1f) + 0x60
 
     return chr(c1) + chr(c2) + chr(c3)
+
+
+class MediaParser(object):
+    @staticmethod
+    def read_h264_nalu(buf: Buf, slim=False) -> dict:
+        buf = Buf(
+            buf
+            .read(buf.unit)
+            .replace(b"\x00\x00\x03\x00", b"\x00\x00\x00")
+            .replace(b"\x00\x00\x03\x01", b"\x00\x00\x01")
+            .replace(b"\x00\x00\x03\x02", b"\x00\x00\x02")
+            .replace(b"\x00\x00\x03\x03", b"\x00\x00\x03")
+        )
+
+        nal = {}
+        nal["forbidden-zero-bit"] = buf.rb(1)
+        nal["ref-idc"] = buf.rb(2)
+        # ISO/IEC 14496-10:2022 page 81
+        nal["unit-type"] = utils.unraw(
+            buf.rb(5),
+            1,
+            {
+                0x06: "Supplemental Enhancement Information",
+                0x07: "Sequence parameter set",
+                0x08: "Picture parameter set",
+            },
+            True,
+        )
+
+        match nal["unit-type"]:
+            case "Sequence parameter set":
+                # ISO/IEC 14496-10:2022 page 59
+                nal["profile-idc"] = buf.ru8()
+                nal["constraint-set-flags"] = [buf.rb(1) for i in range(0, 6)]
+                nal["reserved"] = buf.rb(2)
+                nal["level-idc"] = buf.ru8()
+                nal["seq-parameter-set-id"] = buf.rue()
+
+                if nal["profile-idc"] in (
+                    44,
+                    83,
+                    86,
+                    100,
+                    110,
+                    118,
+                    122,
+                    128,
+                    134,
+                    135,
+                    138,
+                    139,
+                    244,
+                ):
+                    # TODO: scaling lists look annoying and like a problem for later
+                    buf.align()
+                    nal["rest"] = buf.rh(buf.unit)
+                    nal["unknown"] = True
+                    return nal
+
+                # TODO: implement rest
+                buf.align()
+                nal["rest"] = buf.rh(buf.unit)
+            case "Supplemental Enhancement Information":
+                t = 0
+                while True:
+                    b = buf.ru8()
+                    t += b
+                    if b != 0xff:
+                        break
+
+                l = 0
+                while True:
+                    b = buf.ru8()
+                    l += b
+                    if b != 0xff:
+                        break
+
+                nal["type"] = utils.unraw(t, 1, {0x05: "user_data_unregistered"}, True)
+                nal["length"] = l
+
+                buf.pasunit(l)
+
+                if buf.peek(16).hex() == "dc45e9bde6d948b7962cd820d923eeef":
+                    nal["uuid"] = buf.ruuid()
+                    nal["libx264-banner"] = buf.rs(buf.unit)
+                elif buf.peek(16).hex() == "59948b2811ec45af967519d41feaa94d":
+                    nal["uuid"] = buf.ruuid()
+                    nal["h264-vaapi-banner"] = buf.rs(buf.unit)
+                else:
+                    nal["payload"] = buf.rh(buf.unit)
+
+                buf.sapunit()
+            case _:
+                if not slim:
+                    nal["payload"] = buf.rh(buf.unit)
+                nal["unknown"] = True
+
+        return nal
+
+    @staticmethod
+    def read_av1_obu(buf: Buf) -> dict:
+        obu = {}
+        obu["forbidden-bit"] = buf.rb(1)
+        obu["type"] = utils.unraw(
+            buf.rb(4),
+            1,
+            {
+                0x01: "Sequence Header",
+                0x02: "Temporal Delimiter",
+                0x03: "Frame Header",
+                0x04: "Tile Group",
+                0x06: "Frame",
+                0x07: "Redundant Frame Header",
+                0x0b: "Metadata",
+            },
+            True,
+        )
+        obu["extension-flag"] = buf.rb(1)
+        obu["has-size-flag"] = buf.rb(1)
+        obu["reserved1"] = buf.rb(1)
+
+        if obu["extension-flag"]:
+            obu["temporal-id"] = buf.rb(3)
+            obu["spatial-id"] = buf.rb(2)
+            obu["reserved2"] = buf.rb(3)
+
+        if obu["has-size-flag"]:
+            length = buf.ruleb()
+        else:
+            length = buf.unit if buf.unit is not None else buf.available()
+
+        obu["length"] = length
+
+        buf.pasunit(length)
+
+        match obu["type"]:
+            case "Sequence Header":
+                # https://aomediacodec.github.io/av1-spec/#sequence-header-obu-syntax
+                obu["seq-profile"] = buf.rb(3)
+                obu["still-picture"] = buf.rb(1)
+                obu["reduced-still-picture-header"] = buf.rb(1)
+
+                if not obu["reduced-still-picture-header"]:
+                    obu["timing-info-present"] = buf.rb(1)
+
+                    if obu["timing-info-present"]:
+                        obu["num-units-in-display-tick"] = buf.rb(32)
+                        obu["time-scale"] = buf.rb(32)
+                        obu["equal-picture-interval"] = buf.rb(1)
+
+                        if obu["equal-picture-interval"]:
+                            obu["num-ticks-per-picture-minus-one"] = buf.ruvlc()
+
+                        obu["decoder-model-info-present-flag"] = buf.rb(1)
+                        if obu["decoder-model-info-present-flag"]:
+                            obu["buffer-delay-length-minus-one"] = buf.rb(5)
+                            obu["num-units-in-decoding-tick"] = buf.rb(32)
+                            obu["buffer-removal-time-length-minus-one"] = buf.rb(5)
+                            obu["frame-presentation-time-length-minus-one"] = buf.rb(5)
+
+                    obu["initial-display-delay-present-flag"] = buf.rb(1)
+                    obu["operating-points-cnt-minus-one"] = buf.rb(5)
+
+                    obu["operating-points"] = []
+                    for i in range(0, obu["operating-points-cnt-minus-one"] + 1):
+                        op = {}
+                        op["operating-point-idc"] = buf.rb(12)
+                        op["seq-level-idx"] = buf.rb(5)
+
+                        if op["seq-level-idx"] > 1:
+                            op["seq-tier"] = buf.rb(1)
+
+                        if obu.get("decoder-model-info-present-flag"):
+                            op["decoder-model-present-for-this-op"] = buf.rb(1)
+
+                            if op["decoder-model-present-for-this-op"]:
+                                n = obu["buffer-delay-length-minus-one"] + 1
+                                op["decoder-buffer-delay"] = buf.rb(n)
+                                op["encoder-buffer-delay"] = buf.rb(n)
+                                op["low-delay-mode-flag"] = buf.rb(1)
+
+                        if obu.get("initial-display-delay-present-flag"):
+                            op["initial-display-delay-present-for-this-op"] = buf.rb(1)
+
+                            if op["initial-display-delay-present-for-this-op"]:
+                                op["initial-display-delay-minus-one"] = buf.rb(4)
+
+                        obu["operating-points"].append(op)
+
+                obu["frame-width-bits-minus-one"] = buf.rb(4)
+                obu["frame-height-bits-minus-one"] = buf.rb(4)
+                obu["max-frame-width-minus-one"] = buf.rb(obu["frame-width-bits-minus-one"] + 1)
+                obu["max-frame-height-minus-one"] = buf.rb(obu["frame-height-bits-minus-one"] + 1)
+
+                if not obu["reduced-still-picture-header"]:
+                    obu["frame-id-numbers-present-flag"] = buf.rb(1)
+
+                if obu["frame-id-numbers-present-flag"]:
+                    obu["delta-frame-id-length-minus-two"] = buf.rb(4)
+                    obu["additional-frame-id-length-minus-one"] = buf.rb(3)
+
+                obu["use-128x128-superblock"] = buf.rb(1)
+                obu["enable-filter-intra"] = buf.rb(1)
+                obu["enable-intra-edge-filter"] = buf.rb(1)
+
+                if not obu["reduced-still-picture-header"]:
+                    obu["enable-interintra-compound"] = buf.rb(1)
+                    obu["enable-masked-compound"] = buf.rb(1)
+                    obu["enable-warped-motion"] = buf.rb(1)
+                    obu["enable-dual-filter"] = buf.rb(1)
+                    obu["enable-order-hint"] = buf.rb(1)
+
+                    if obu["enable-order-hint"]:
+                        obu["enable-jnt-comp"] = buf.rb(1)
+                        obu["enable-ref-frame-mvs"] = buf.rb(1)
+
+                    obu["seq-choose-screen-content-tools"] = buf.rb(1)
+
+                    if obu["seq-choose-screen-content-tools"]:
+                        obu["seq-force-screen-content-tools"] = buf.rb(1)
+
+                    if obu.get("seq-force-screen-content-tools", 0) > 0:
+                        obu["seq-choose-integer-mv"] = buf.rb(1)
+
+                        if obu["seq-choose-integer-mv"]:
+                            obu["seq-force-integer-mv"] = buf.rb(1)
+
+                    if obu["enable-order-hint"]:
+                        obu["order-hint-bits-minus-1"] = buf.rb(3)
+
+                obu["enable-superres"] = buf.rb(1)
+                obu["enable-cdef"] = buf.rb(1)
+                obu["enable-restoration"] = buf.rb(1)
+
+                obu["high-bitdepth"] = buf.rb(1)
+
+                if obu["seq-profile"] == 2 and obu["high-bitdepth"]:
+                    obu["twelve-bit"] = buf.rb(1)
+
+                if obu["seq-profile"] != 1:
+                    obu["monochrome"] = buf.rb(1)
+
+                obu["color-description-present-flag"] = buf.rb(1)
+
+                if obu["color-description-present-flag"]:
+                    obu["color-primaries"] = buf.rb(8)
+                    obu["transfer-characteristics"] = buf.rb(8)
+                    obu["matrix-coefficients"] = buf.rb(8)
+
+                if obu.get("monochrome"):
+                    obu["color-range"] = buf.rb(1)
+                elif (
+                    obu.get("color-primaries") == 1
+                    and obu.get("transfer-characteristics") == 13
+                    and obu.get("matrix-coefficients") == 0
+                ):
+                    pass
+                else:
+                    obu["color-range"] = buf.rb(1)
+
+                    if obu["seq-profile"] not in (0, 1) and obu.get("twelve-bit"):
+                        obu["subsampling-x"] = buf.rb(1)
+
+                        if obu["subsampling-x"]:
+                            obu["subsampling-y"] = buf.rb(1)
+
+                    if obu.get("subsampling-x") and obu.get("subsampling-y"):
+                        obu["chroma-sample-position"] = buf.rb(2)
+
+                obu["separate-uv-delta-q"] = buf.rb(1)
+
+                obu["film-grain-params-present"] = buf.rb(1)
+
+                buf.align()
+            case _:
+                obu["unknown"] = True
+
+        buf.sapunit()
+
+        return obu
+
+    @staticmethod
+    def read_h265_nalu(buf: Buf) -> dict:
+        buf = Buf(
+            buf
+            .read(buf.unit)
+            .replace(b"\x00\x00\x03\x00", b"\x00\x00\x00")
+            .replace(b"\x00\x00\x03\x01", b"\x00\x00\x01")
+            .replace(b"\x00\x00\x03\x02", b"\x00\x00\x02")
+            .replace(b"\x00\x00\x03\x03", b"\x00\x00\x03")
+        )
+
+        nal = {}
+        nal["forbidden-zero-bit"] = buf.rb(1)
+        nal["unit-type"] = utils.unraw(
+            buf.rb(6),
+            1,
+            {0x20: "VPS", 0x21: "SPS", 0x22: "PPS", 0x27: "Prefix SEI", 0x28: "Suffix SEI"},
+            True,
+        )
+        nal["nuh-layer-id"] = buf.rb(6)
+        nal["nuh-temporal-id-plus-one"] = buf.rb(3)
+
+        match nal["unit-type"]:
+            case "Prefix SEI":
+                nal["seis"] = []
+
+                while buf.unit is not None and buf.unit > 1:
+                    typ = 0
+                    while True:
+                        part = buf.ru8()
+                        typ += part
+
+                        if part != 0xff:
+                            break
+
+                    length = 0
+                    while True:
+                        part = buf.ru8()
+                        length += part
+
+                        if part != 0xff:
+                            break
+
+                    sei = {}
+                    sei["type"] = utils.unraw(typ, 1, {0x05: "user_data_unregistered"}, True)
+                    sei["length"] = length
+
+                    match sei["type"]:
+                        case "user_data_unregistered":
+                            sei["uuid"] = buf.ruuid()
+
+                            match sei["uuid"]:
+                                case "2ca2de09-b517-47db-bb55-a4fe7fc2fc4e":
+                                    sei["string"] = buf.rs(buf.available())
+                                case _:
+                                    sei["payload"] = buf.rh(buf.available())
+
+                    nal["seis"].append(sei)
+            case _:
+                nal["unknown"] = True
+
+        return nal
 
 
 @module.register
@@ -279,14 +621,14 @@ class IsoModule(module.RuminantModule):
             atom["data"]["sequence-parameter-sets"] = []
             for i in range(0, atom["data"]["sequence-parameter-set-count"]):
                 self.buf.pasunit(self.buf.ru16())
-                atom["data"]["sequence-parameter-sets"].append(self.read_h264_nalu())
+                atom["data"]["sequence-parameter-sets"].append(MediaParser.read_h264_nalu(self.buf))
                 self.buf.sapunit()
 
             atom["data"]["picture-parameter-set-count"] = self.buf.ru8()
             atom["data"]["picture-parameter-sets"] = []
             for i in range(0, atom["data"]["picture-parameter-set-count"]):
                 self.buf.pasunit(self.buf.ru16())
-                atom["data"]["picture-parameter-sets"].append(self.read_h264_nalu())
+                atom["data"]["picture-parameter-sets"].append(MediaParser.read_h264_nalu(self.buf))
                 self.buf.sapunit()
 
             if atom["data"]["avc-profile-indication"] not in (66, 77, 88):
@@ -302,7 +644,7 @@ class IsoModule(module.RuminantModule):
                     atom["data"]["picture-parameter-set-exts"] = []
                     for i in range(0, atom["data"]["picture-parameter-set-ext-count"]):
                         self.buf.pasunit(self.buf.ru16())
-                        atom["data"]["picture-parameter-set-exts"].append(self.read_h264_nalu())
+                        atom["data"]["picture-parameter-set-exts"].append(MediaParser.read_h264_nalu(self.buf))
                         self.buf.sapunit()
         elif typ == "colr":
             if self.mode == "jp2":
@@ -529,7 +871,7 @@ class IsoModule(module.RuminantModule):
 
                     self.buf.pasunit(entry["nalu-length"])
 
-                    entry["nalu"] = self.read_h265_nalu()
+                    entry["nalu"] = MediaParser.read_h265_nalu(self.buf)
 
                     self.buf.sapunit()
 
@@ -834,6 +1176,9 @@ class IsoModule(module.RuminantModule):
             atom["data"]["reserved"] = temp >> 5
             atom["data"]["initial-presentation-delay-present"] = bool(temp & 0x10)
             atom["data"]["initial-presentation-delay-minus-one"] = temp & 0x0f
+            atom["data"]["obus"] = []
+            while self.buf.unit > 0:
+                atom["data"]["obus"].append(MediaParser.read_av1_obu(self.buf))
         elif typ == "ipma":
             version = self.read_version(atom)
             item_count = self.buf.ru32() if version > 0 else self.buf.ru16()
@@ -1503,7 +1848,7 @@ class IsoModule(module.RuminantModule):
 
                     self.buf.pasunit(nalu["length"])
 
-                    nalu["payload"] = self.read_h264_nalu(slim=True)
+                    nalu["payload"] = MediaParser.read_h264_nalu(self.buf)(slim=True)
 
                     self.buf.sapunit()
 
@@ -1516,7 +1861,7 @@ class IsoModule(module.RuminantModule):
 
                 data["obus"] = []
                 while self.buf.unit > 0:
-                    data["obus"].append(self.read_av1_obu())
+                    data["obus"].append(MediaParser.read_av1_obu(self.buf))
 
                 self.buf.sapunit()
             case "tx3g":
@@ -1540,7 +1885,7 @@ class IsoModule(module.RuminantModule):
 
                     self.buf.pasunit(nalu["length"])
 
-                    nalu["payload"] = self.read_h265_nalu()
+                    nalu["payload"] = MediaParser.read_h265_nalu(self.buf)
 
                     self.buf.sapunit()
 
@@ -1701,193 +2046,6 @@ class IsoModule(module.RuminantModule):
         self.buf.sapunit()
 
         return tlv
-
-    def read_h264_nalu(self, slim=False):
-        nal = {}
-        nal["forbidden-zero-bit"] = self.buf.rb(1)
-        nal["ref-idc"] = self.buf.rb(2)
-        # ISO/IEC 14496-10:2022 page 81
-        nal["unit-type"] = utils.unraw(
-            self.buf.rb(5),
-            1,
-            {
-                0x06: "Supplemental Enhancement Information",
-                0x07: "Sequence parameter set",
-                0x08: "Picture parameter set",
-            },
-            True,
-        )
-
-        match nal["unit-type"]:
-            case "Sequence parameter set":
-                # ISO/IEC 14496-10:2022 page 59
-                nal["profile-idc"] = self.buf.ru8()
-                nal["constraint-set-flags"] = [self.buf.rb(1) for i in range(0, 6)]
-                nal["reserved"] = self.buf.rb(2)
-                nal["level-idc"] = self.buf.ru8()
-                nal["seq-parameter-set-id"] = self.buf.rue()
-
-                if nal["profile-idc"] in (
-                    44,
-                    83,
-                    86,
-                    100,
-                    110,
-                    118,
-                    122,
-                    128,
-                    134,
-                    135,
-                    138,
-                    139,
-                    244,
-                ):
-                    # TODO: scaling lists look annoying and like a problem for later
-                    self.buf.align()
-                    nal["rest"] = self.buf.rh(self.buf.unit)
-                    nal["unknown"] = True
-                    return nal
-
-                # TODO: implement rest
-                self.buf.align()
-                nal["rest"] = self.buf.rh(self.buf.unit)
-            case "Supplemental Enhancement Information":
-                t = 0
-                while True:
-                    b = self.buf.ru8()
-                    t += b
-                    if b != 0xff:
-                        break
-
-                l = 0
-                while True:
-                    b = self.buf.ru8()
-                    l += b
-                    if b != 0xff:
-                        break
-
-                nal["type"] = utils.unraw(t, 1, {0x05: "user_data_unregistered"}, True)
-                nal["length"] = l
-
-                self.buf.pasunit(l)
-
-                if self.buf.peek(16).hex() == "dc45e9bde6d948b7962cd820d923eeef":
-                    nal["uuid"] = self.buf.ruuid()
-                    nal["libx264-banner"] = self.buf.rs(self.buf.unit)
-                elif self.buf.peek(16).hex() == "59948b2811ec45af967519d41feaa94d":
-                    nal["uuid"] = self.buf.ruuid()
-                    nal["h264-vaapi-banner"] = self.buf.rs(self.buf.unit)
-                else:
-                    nal["payload"] = self.buf.rh(self.buf.unit)
-
-                self.buf.sapunit()
-            case _:
-                if not slim:
-                    nal["payload"] = self.buf.rh(self.buf.unit)
-                nal["unknown"] = True
-
-        return nal
-
-    def read_av1_obu(self):
-        obu = {}
-        obu["forbidden-bit"] = self.buf.rb(1)
-        obu["type"] = utils.unraw(
-            self.buf.rb(4),
-            1,
-            {
-                0x01: "Sequence Header",
-                0x02: "Temporal Delimiter",
-                0x03: "Frame Header",
-                0x04: "Tile Group",
-                0x06: "Frame",
-                0x07: "Redundant Frame Header",
-                0x0b: "Metadata",
-            },
-            True,
-        )
-        obu["extension-flag"] = self.buf.rb(1)
-        obu["has-size-flag"] = self.buf.rb(1)
-        obu["reserved1"] = self.buf.rb(1)
-
-        if obu["extension-flag"]:
-            obu["temporal-id"] = self.buf.rb(3)
-            obu["spatial-id"] = self.buf.rb(2)
-            obu["reserved2"] = self.buf.rb(3)
-
-        if obu["has-size-flag"]:
-            length = self.buf.ruleb()
-        else:
-            length = self.buf.unit if self.buf.unit is not None else self.buf.available()
-
-        obu["length"] = length
-
-        self.buf.pasunit(length)
-
-        self.buf.sapunit()
-
-        return obu
-
-    def read_h265_nalu(self):
-        nal = {}
-        nal["forbidden-zero-bit"] = self.buf.rb(1)
-        nal["unit-type"] = utils.unraw(
-            self.buf.rb(6),
-            1,
-            {0x20: "VPS", 0x21: "SPS", 0x22: "PPS", 0x27: "Prefix SEI", 0x28: "Suffix SEI"},
-            True,
-        )
-        nal["nuh-layer-id"] = self.buf.rb(6)
-        nal["nuh-temporal-id-plus-one"] = self.buf.rb(3)
-
-        match nal["unit-type"]:
-            case "Prefix SEI":
-                nal["seis"] = []
-
-                while self.buf.unit > 1:
-                    typ = 0
-                    while True:
-                        part = self.buf.ru8()
-                        typ += part
-
-                        if part != 0xff:
-                            break
-
-                    length = 0
-                    while True:
-                        part = self.buf.ru8()
-                        length += part
-
-                        if part != 0xff:
-                            break
-
-                    sei = {}
-                    sei["type"] = utils.unraw(typ, 1, {0x05: "user_data_unregistered"}, True)
-                    sei["length"] = length
-
-                    buf = Buf(
-                        self.buf
-                        .read(length)
-                        .replace(b"\x00\x00\x03\x00", b"\x00\x00\x00")
-                        .replace(b"\x00\x00\x03\x01", b"\x00\x00\x01")
-                        .replace(b"\x00\x00\x03\x02", b"\x00\x00\x02")
-                        .replace(b"\x00\x00\x03\x03", b"\x00\x00\x03")
-                    )
-
-                    match sei["type"]:
-                        case "user_data_unregistered":
-                            sei["uuid"] = buf.ruuid()
-
-                            match sei["uuid"]:
-                                case "2ca2de09-b517-47db-bb55-a4fe7fc2fc4e":
-                                    sei["string"] = buf.rs(buf.available())
-                                case _:
-                                    sei["payload"] = buf.rh(buf.available())
-
-                    nal["seis"].append(sei)
-            case _:
-                nal["unknown"] = True
-
-        return nal
 
 
 @module.register
@@ -2171,9 +2329,12 @@ class MatroskaModule(module.RuminantModule):
                 "codec": self.get(track, ["CodecID"])[0]["data"],
             })
 
-            codec_private = self.get(track, ["CodecPrivate"])[0]
-            self.buf.seek(codec_private["data-offset"])
-            codec_privates[self.get(track, ["TrackNumber"])[0]["data"]] = codec_private
+            try:
+                codec_private = self.get(track, ["CodecPrivate"])[0]
+                self.buf.seek(codec_private["data-offset"])
+                codec_privates[self.get(track, ["TrackNumber"])[0]["data"]] = codec_private
+            except IndexError:
+                pass
 
         blocks = []
         sample_offsets: dict[int, list[int]] = {}
@@ -2253,6 +2414,7 @@ class MatroskaModule(module.RuminantModule):
             self.buf.pasunit(sample_sizes[stream["id"]][0])
 
             parsed: dict = {}
+            nalu: dict = {}
             match stream["codec"]:
                 case "V_MPEG4/ISO/AVC":
                     with self.buf:
@@ -2271,14 +2433,14 @@ class MatroskaModule(module.RuminantModule):
                         parsed["sequence-parameter-sets"] = []
                         for i in range(0, parsed["sequence-parameter-set-count"]):
                             self.buf.pasunit(self.buf.ru16())
-                            parsed["sequence-parameter-sets"].append(IsoModule.read_h264_nalu(cast(IsoModule, self)))
+                            parsed["sequence-parameter-sets"].append(MediaParser.read_h264_nalu(self.buf))
                             self.buf.sapunit()
 
                         parsed["picture-parameter-set-count"] = self.buf.ru8()
                         parsed["picture-parameter-sets"] = []
                         for i in range(0, parsed["picture-parameter-set-count"]):
                             self.buf.pasunit(self.buf.ru16())
-                            parsed["picture-parameter-sets"].append(IsoModule.read_h264_nalu(cast(IsoModule, self)))
+                            parsed["picture-parameter-sets"].append(MediaParser.read_h264_nalu(self.buf))
                             self.buf.sapunit()
 
                         if (
@@ -2296,7 +2458,7 @@ class MatroskaModule(module.RuminantModule):
                             parsed["sequence-parameter-ext-sets"] = []
                             for i in range(0, parsed["sequence-parameter-set-ext-count"]):
                                 self.buf.pasunit(self.buf.ru16())
-                                parsed["sequence-parameter-ext-sets"].append(IsoModule.read_h264_nalu(cast(IsoModule, self)))
+                                parsed["sequence-parameter-ext-sets"].append(MediaParser.read_h264_nalu(self.buf))
                                 self.buf.sapunit()
 
                         codec_privates[stream["id"]]["parsed"] = parsed
@@ -2310,7 +2472,7 @@ class MatroskaModule(module.RuminantModule):
 
                         self.buf.pasunit(nalu["length"])
 
-                        nalu["payload"] = IsoModule.read_h264_nalu(cast(IsoModule, self), slim=True)
+                        nalu["payload"] = MediaParser.read_h264_nalu(self.buf, slim=True)
 
                         self.buf.sapunit()
 
@@ -2365,12 +2527,12 @@ class MatroskaModule(module.RuminantModule):
                             array["nalu-count"] = self.buf.ru16()
                             array["nalus"] = []
                             for j in range(0, array["nalu-count"]):
-                                entry = {}
+                                entry: dict = {}
                                 entry["nalu-length"] = self.buf.ru16()
 
                                 self.buf.pasunit(entry["nalu-length"])
 
-                                entry["nalu"] = IsoModule.read_h265_nalu(cast(IsoModule, self))
+                                entry["nalu"] = MediaParser.read_h265_nalu(self.buf)
 
                                 self.buf.sapunit()
 
@@ -2389,7 +2551,7 @@ class MatroskaModule(module.RuminantModule):
 
                         self.buf.pasunit(nalu["length"])
 
-                        nalu["payload"] = IsoModule.read_h265_nalu(cast(IsoModule, self))
+                        nalu["payload"] = MediaParser.read_h265_nalu(self.buf)
 
                         self.buf.sapunit()
 
@@ -2406,15 +2568,49 @@ class MatroskaModule(module.RuminantModule):
 
                     with self.buf.subunit():
                         stream["first-sample"] = chew(self.buf, blob_mode=True)
-                case _:
+                case "V_AV1":
                     with self.buf:
                         self.buf.seek(codec_privates[stream["id"]]["data-offset"])
                         self.buf.pasunit(codec_privates[stream["id"]]["length"])
 
-                        with self.buf.subunit():
-                            stream["codec-private"] = chew(self.buf, blob_mode=True)
+                        temp = self.buf.ru8()
+                        parsed["version"] = temp & 0x7f
+                        temp = self.buf.ru8()
+                        parsed["seq-profile"] = temp >> 5
+                        parsed["seq-level-idx-0"] = temp & 0x1f
+                        temp = self.buf.ru8()
+                        parsed["seq-tier-0"] = bool(temp & 0x80)
+                        parsed["high-bitdepth"] = bool(temp & 0x40)
+                        parsed["twelve-bit"] = bool(temp & 0x20)
+                        parsed["monochrome"] = bool(temp & 0x10)
+                        parsed["chroma-subsampling-x"] = bool(temp & 0x08)
+                        parsed["chroma-subsampling-y"] = bool(temp & 0x04)
+                        parsed["chroma-sample-poisition"] = temp & 0x03
+                        temp = self.buf.ru8()
+                        parsed["reserved"] = temp >> 5
+                        parsed["initial-presentation-delay-present"] = bool(temp & 0x10)
+                        parsed["initial-presentation-delay-minus-one"] = temp & 0x0f
 
+                        parsed["obus"] = []
+                        while self.buf.hasunit():
+                            parsed["obus"].append(MediaParser.read_av1_obu(self.buf))
+
+                        codec_privates[stream["id"]]["parsed"] = parsed
                         self.buf.sapunit()
+
+                    stream["first-sample-obus"] = []
+                    while self.buf.hasunit():
+                        stream["first-sample-obus"].append(MediaParser.read_av1_obu(self.buf))
+                case _:
+                    if stream["id"] in codec_privates:
+                        with self.buf:
+                            self.buf.seek(codec_privates[stream["id"]]["data-offset"])
+                            self.buf.pasunit(codec_privates[stream["id"]]["length"])
+
+                            with self.buf.subunit():
+                                stream["codec-private"] = chew(self.buf, blob_mode=True)
+
+                            self.buf.sapunit()
 
                     with self.buf.subunit():
                         stream["first-sample"] = chew(self.buf, blob_mode=True)

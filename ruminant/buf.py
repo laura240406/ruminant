@@ -743,6 +743,18 @@ class Buf(object):
         with self:
             return self.riue()
 
+    def ruvlc(self):
+        leading_zeroes = 0
+
+        while self.rb(1) == 0:
+            leading_zeroes += 1
+
+        return self.rb(leading_zeroes) + (1 << leading_zeroes) - 1
+
+    def puvlc(self):
+        with self:
+            return self.ruvlc()
+
     def align(self):
         if self._bits != 0:
             self._bits = 0
