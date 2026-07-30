@@ -2191,7 +2191,7 @@ class MatroskaModule(module.RuminantModule):
 
         for block in blocks:
             self.buf.seek(block["data-offset"])
-            self.buf.pasunit(block["length"] - (block["data-offset"] - block["offset"]))
+            self.buf.pasunit(block["length"])
 
             track_id = self.read_vint()
             self.buf.skip(2)
@@ -2252,16 +2252,13 @@ class MatroskaModule(module.RuminantModule):
             self.buf.seek(sample_offsets[stream["id"]][0])
             self.buf.pasunit(sample_sizes[stream["id"]][0])
 
+            parsed: dict = {}
             match stream["codec"]:
                 case "V_MPEG4/ISO/AVC":
                     with self.buf:
                         self.buf.seek(codec_privates[stream["id"]]["data-offset"])
-                        self.buf.pasunit(
-                            codec_privates[stream["id"]]["length"]
-                            - (codec_privates[stream["id"]]["data-offset"] - codec_privates[stream["id"]]["offset"])
-                        )
+                        self.buf.pasunit(codec_privates[stream["id"]]["length"])
 
-                        parsed: dict = {}
                         parsed["configuration-version"] = self.buf.ru8()
                         parsed["avc-profile-indication"] = self.buf.ru8()
                         parsed["profile-compatibility"] = self.buf.ru8()
@@ -2318,6 +2315,111 @@ class MatroskaModule(module.RuminantModule):
                         self.buf.sapunit()
 
                         stream["first-sample-nals"].append(nalu)
+                case "V_MPEGH/ISO/HEVC":
+                    with self.buf:
+                        self.buf.seek(codec_privates[stream["id"]]["data-offset"])
+                        self.buf.pasunit(codec_privates[stream["id"]]["length"])
+
+                        parsed["configuration-version"] = self.buf.ru8()
+
+                        parsed["general-profile-space"] = self.buf.rb(2)
+                        parsed["general-tier-flag"] = self.buf.rb(1)
+                        parsed["general-profile-idc"] = self.buf.rb(5)
+
+                        parsed["profile-compatibility-flags"] = self.buf.ru32()
+                        parsed["constraint-indicator-flags"] = self.buf.ru48()
+                        parsed["level-idc"] = self.buf.ru8()
+                        parsed["min-spatial-segmentation-idc"] = self.buf.ru16()
+                        parsed["parallelism-type"] = self.buf.ru8()
+                        parsed["chroma-format"] = self.buf.ru8()
+                        parsed["reserved1"] = self.buf.rb(5)
+                        parsed["bit-depth-luma-minus8"] = self.buf.rb(3)
+                        parsed["reserved2"] = self.buf.rb(5)
+                        parsed["bit-depth-chroma-minus8"] = self.buf.rb(3)
+                        parsed["avg-frame-rate"] = self.buf.rfp16()
+
+                        parsed["constant-frame-rate"] = self.buf.rb(2)
+                        parsed["num-temporal-layers"] = self.buf.rb(3)
+                        parsed["temporal-id-nested"] = self.buf.rb(1)
+                        parsed["length-size-minus-one"] = self.buf.rb(2)
+
+                        parsed["array-count"] = self.buf.ru8()
+
+                        parsed["arrays"] = []
+                        for i in range(0, parsed["array-count"]):
+                            array = {}
+                            array["array-completeness"] = self.buf.rb(1)
+                            array["reserved"] = self.buf.rb(1)
+                            array["nal-unit-type"] = utils.unraw(
+                                self.buf.rb(6),
+                                1,
+                                {
+                                    0x20: "VPS",
+                                    0x21: "SPS",
+                                    0x22: "PPS",
+                                    0x27: "Prefix SEI",
+                                    0x28: "Suffix SEI",
+                                },
+                                True,
+                            )
+                            array["nalu-count"] = self.buf.ru16()
+                            array["nalus"] = []
+                            for j in range(0, array["nalu-count"]):
+                                entry = {}
+                                entry["nalu-length"] = self.buf.ru16()
+
+                                self.buf.pasunit(entry["nalu-length"])
+
+                                entry["nalu"] = IsoModule.read_h265_nalu(cast(IsoModule, self))
+
+                                self.buf.sapunit()
+
+                                array["nalus"].append(entry)
+
+                            parsed["arrays"].append(array)
+
+                        codec_privates[stream["id"]]["parsed"] = parsed
+                        self.buf.sapunit()
+
+                    nal_length_size = parsed["length-size-minus-one"] + 1
+                    stream["first-sample-nals"] = []
+                    while self.buf.hasunit():
+                        nalu = {}
+                        nalu["length"] = int.from_bytes(self.buf.read(nal_length_size), "big")
+
+                        self.buf.pasunit(nalu["length"])
+
+                        nalu["payload"] = IsoModule.read_h265_nalu(cast(IsoModule, self))
+
+                        self.buf.sapunit()
+
+                        stream["first-sample-nals"].append(nalu)
+                case "A_FLAC":
+                    with self.buf:
+                        self.buf.seek(codec_privates[stream["id"]]["data-offset"])
+                        self.buf.pasunit(codec_privates[stream["id"]]["length"])
+
+                        with self.buf.subunit():
+                            codec_privates[stream["id"]]["parsed"] = chew(self.buf)
+
+                        self.buf.sapunit()
+
+                    with self.buf.subunit():
+                        stream["first-sample"] = chew(self.buf, blob_mode=True)
+                case _:
+                    with self.buf:
+                        self.buf.seek(codec_privates[stream["id"]]["data-offset"])
+                        self.buf.pasunit(codec_privates[stream["id"]]["length"])
+
+                        with self.buf.subunit():
+                            stream["codec-private"] = chew(self.buf, blob_mode=True)
+
+                        self.buf.sapunit()
+
+                    with self.buf.subunit():
+                        stream["first-sample"] = chew(self.buf, blob_mode=True)
+
+                    stream["unknown"] = True
 
             self.buf.sapunit()
 
