@@ -1863,7 +1863,7 @@ class IsoModule(module.RuminantModule):
             self.buf.popunit()
 
             stream["sample-count"] = len(sample_to_offset)
-            stream["data"] = self.process_stream(stsd["data"]["atoms"][0], sample_to_offset, sample_sizes)
+            stream["data"] = self.process_stream(stsd["data"]["atoms"][0], sample_to_offset, sample_sizes, atoms)
 
             streams.append(stream)
 
@@ -1899,7 +1899,7 @@ class IsoModule(module.RuminantModule):
 
         return pictures
 
-    def process_stream(self, codec, sample_to_offset, sample_sizes):
+    def process_stream(self, codec, sample_to_offset, sample_sizes, atoms):
         data = {}
 
         match codec["type"]:
@@ -1926,14 +1926,27 @@ class IsoModule(module.RuminantModule):
 
                 self.buf.sapunit()
             case "av01":
-                self.buf.seek(sample_to_offset[0])
-                self.buf.pasunit(sample_sizes[0])
+                if self.get_all(atoms, "ftyp")[0]["data"]["major-brand"] == "avis":
+                    data["pictures"] = []
+                    for i in range(0, len(sample_to_offset)):
+                        picture = []
+                        self.buf.seek(sample_to_offset[i])
+                        self.buf.pasunit(sample_sizes[i])
 
-                data["obus"] = []
-                while self.buf.unit > 0:
-                    data["obus"].append(MediaParser.read_av1_obu(self.buf))
+                        while self.buf.unit > 0:
+                            picture.append(MediaParser.read_av1_obu(self.buf))
 
-                self.buf.sapunit()
+                        data["pictures"].append(picture)
+                        self.buf.sapunit()
+                else:
+                    self.buf.seek(sample_to_offset[0])
+                    self.buf.pasunit(sample_sizes[0])
+
+                    data["obus"] = []
+                    while self.buf.unit > 0:
+                        data["obus"].append(MediaParser.read_av1_obu(self.buf))
+
+                    self.buf.sapunit()
             case "tx3g":
                 data["text"] = []
                 for i in range(0, min(len(sample_to_offset), 16)):
