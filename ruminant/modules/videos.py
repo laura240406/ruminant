@@ -211,7 +211,7 @@ class MediaParser(object):
                 if not obu["reduced-still-picture-header"]:
                     obu["frame-id-numbers-present-flag"] = buf.rb(1)
 
-                if obu["frame-id-numbers-present-flag"]:
+                if obu.get("frame-id-numbers-present-flag"):
                     obu["delta-frame-id-length-minus-two"] = buf.rb(4)
                     obu["additional-frame-id-length-minus-one"] = buf.rb(3)
 
@@ -1754,6 +1754,9 @@ class IsoModule(module.RuminantModule):
         return result
 
     def parse_mdat(self, atoms):
+        if self.get_all(atoms, "ftyp")[0]["data"]["major-brand"] == "avif":
+            return self.process_heic_mdat(atoms)
+
         moov = self.get_all(atoms, "moov")[0]["data"]["atoms"]
         traks = self.get_all(moov, "trak")
 
@@ -1828,6 +1831,36 @@ class IsoModule(module.RuminantModule):
             streams.append(stream)
 
         return streams
+
+    def process_heic_mdat(self, atoms):
+        meta = self.get_all(atoms, "meta")[0]["data"]["atoms"]
+        iloc = self.get_all(meta, "iloc")[0]
+        iprp = self.get_all(meta, "iprp")[0]["data"]["atoms"]
+        ipco = self.get_all(iprp, "ipco")[0]["data"]["atoms"]
+
+        codec = None
+        for atom in ipco:
+            if atom["type"] in ("av1C",):
+                codec = atom["type"]
+                break
+
+        pictures = []
+        for entry in iloc["data"]["items"]:
+            picture = {}
+            picture["type"] = codec
+            picture["id"] = entry["id"]
+
+            data = b""
+            for extent in entry["extents"]:
+                self.buf.seek(extent["offset"] + entry["base-offset"])
+                data += self.buf.read(extent["length"])
+
+            picture["buf"] = Buf(data)
+
+            self.process_heic_picture(codec, picture)
+            pictures.append(picture)
+
+        return pictures
 
     def process_stream(self, codec, sample_to_offset, sample_sizes):
         data = {}
@@ -1904,6 +1937,13 @@ class IsoModule(module.RuminantModule):
                 data["unknown"] = True
 
         return data
+
+    def process_heic_picture(self, codec, picture):
+        picture["obus"] = []
+        while picture["buf"].available():
+            picture["obus"].append(MediaParser.read_av1_obu(picture["buf"]))
+
+        del picture["buf"]
 
     def read_esds(self):
         # see ISO/IEC 14496-1
