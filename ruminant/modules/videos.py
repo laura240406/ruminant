@@ -156,7 +156,14 @@ class MediaParser(object):
                 obu["still-picture"] = buf.rb(1)
                 obu["reduced-still-picture-header"] = buf.rb(1)
 
-                if not obu["reduced-still-picture-header"]:
+                if obu["reduced-still-picture-header"]:
+                    obu["operating-points"] = [
+                        {
+                            "operating-point-idc": 0,
+                            "seq-level-idx": buf.rb(5),
+                        }
+                    ]
+                else:
                     obu["timing-info-present"] = buf.rb(1)
 
                     if obu["timing-info-present"]:
@@ -183,7 +190,7 @@ class MediaParser(object):
                         op["operating-point-idc"] = buf.rb(12)
                         op["seq-level-idx"] = buf.rb(5)
 
-                        if op["seq-level-idx"] > 1:
+                        if op["seq-level-idx"] > 7:
                             op["seq-tier"] = buf.rb(1)
 
                         if obu.get("decoder-model-info-present-flag"):
@@ -226,23 +233,32 @@ class MediaParser(object):
                     obu["enable-dual-filter"] = buf.rb(1)
                     obu["enable-order-hint"] = buf.rb(1)
 
-                    if obu["enable-order-hint"]:
+                    if obu.get("enable-order-hint"):
                         obu["enable-jnt-comp"] = buf.rb(1)
                         obu["enable-ref-frame-mvs"] = buf.rb(1)
 
                     obu["seq-choose-screen-content-tools"] = buf.rb(1)
 
                     if obu["seq-choose-screen-content-tools"]:
+                        obu["seq-force-screen-content-tools"] = 2
+                    else:
                         obu["seq-force-screen-content-tools"] = buf.rb(1)
 
                     if obu.get("seq-force-screen-content-tools", 0) > 0:
                         obu["seq-choose-integer-mv"] = buf.rb(1)
 
                         if obu["seq-choose-integer-mv"]:
+                            obu["seq-force-integer-mv"] = 2
+                        else:
                             obu["seq-force-integer-mv"] = buf.rb(1)
+                    else:
+                        obu["seq-force-integer-mv"] = 2
 
-                    if obu["enable-order-hint"]:
+                    if obu.get("enable-order-hint"):
                         obu["order-hint-bits-minus-1"] = buf.rb(3)
+                else:
+                    obu["seq-force-screen-content-tools"] = 2
+                    obu["seq-force-integer-mv"] = 2
 
                 obu["enable-superres"] = buf.rb(1)
                 obu["enable-cdef"] = buf.rb(1)
@@ -252,8 +268,13 @@ class MediaParser(object):
 
                 if obu["seq-profile"] == 2 and obu["high-bitdepth"]:
                     obu["twelve-bit"] = buf.rb(1)
+                    bit_depth = 12 if obu.get("twelve-bit") else 10
+                else:
+                    bit_depth = 10 if obu["high-bitdepth"] else 8
 
-                if obu["seq-profile"] != 1:
+                if obu["seq-profile"] == 1:
+                    obu["monochrome"] = 0
+                else:
                     obu["monochrome"] = buf.rb(1)
 
                 obu["color-description-present-flag"] = buf.rb(1)
@@ -265,25 +286,41 @@ class MediaParser(object):
 
                 if obu.get("monochrome"):
                     obu["color-range"] = buf.rb(1)
-                elif (
-                    obu.get("color-primaries") == 1
-                    and obu.get("transfer-characteristics") == 13
-                    and obu.get("matrix-coefficients") == 0
-                ):
-                    pass
+                    obu["subsampling-x"] = 1
+                    obu["subsampling-y"] = 1
                 else:
-                    obu["color-range"] = buf.rb(1)
+                    if (
+                        obu.get("color-primaries") == 1
+                        and obu.get("transfer-characteristics") == 13
+                        and obu.get("matrix-coefficients") == 0
+                    ):
+                        obu["color-range"] = 1
+                        obu["subsampling-x"] = 0
+                        obu["subsampling-y"] = 0
+                    else:
+                        obu["color-range"] = buf.rb(1)
 
-                    if obu["seq-profile"] not in (0, 1) and obu.get("twelve-bit"):
-                        obu["subsampling-x"] = buf.rb(1)
+                        if obu["seq-profile"] == 0:
+                            obu["subsampling-x"] = 1
+                            obu["subsampling-y"] = 1
+                        elif obu["seq-profile"] == 1:
+                            obu["subsampling-x"] = 0
+                            obu["subsampling-y"] = 0
+                        else:
+                            if bit_depth == 12:
+                                obu["subsampling-x"] = buf.rb(1)
+                                if obu["subsampling-x"]:
+                                    obu["subsampling-y"] = buf.rb(1)
+                                else:
+                                    obu["subsampling-y"] = 0
+                            else:
+                                obu["subsampling-x"] = 1
+                                obu["subsampling-y"] = 0
 
-                        if obu["subsampling-x"]:
-                            obu["subsampling-y"] = buf.rb(1)
+                        if obu.get("subsampling-x") and obu.get("subsampling-y"):
+                            obu["chroma-sample-position"] = buf.rb(2)
 
-                    if obu.get("subsampling-x") and obu.get("subsampling-y"):
-                        obu["chroma-sample-position"] = buf.rb(2)
-
-                obu["separate-uv-delta-q"] = buf.rb(1)
+                    obu["separate-uv-delta-q"] = buf.rb(1)
 
                 obu["film-grain-params-present"] = buf.rb(1)
 
