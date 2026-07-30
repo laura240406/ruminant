@@ -1686,6 +1686,12 @@ class IsoModule(module.RuminantModule):
                     array["nalus"].append(nalu)
 
                 atom["data"]["arrays"].append(array)
+        elif typ == "ccst":
+            self.read_version(atom)
+            atom["data"]["all-ref-pics-intra"] = self.buf.rb(1)
+            atom["data"]["intra-pred-used"] = self.buf.rb(1)
+            atom["data"]["max-ref-per-pic"] = self.buf.rb(4)
+            atom["data"]["reserved"] = self.buf.rb(26)
         elif typ[0] == "©" or typ in ("iods", "SDLN", "smrd"):
             if typ[:2] == "©T" and self.buf.pu16() == self.buf.unit - 4:
                 length = self.buf.ru16()
