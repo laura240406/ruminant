@@ -358,7 +358,7 @@ class MediaParser(object):
             case "Prefix SEI":
                 nal["seis"] = []
 
-                while buf.unit is not None and buf.unit > 1:
+                while buf.available():
                     typ = 0
                     while True:
                         part = buf.ru8()
