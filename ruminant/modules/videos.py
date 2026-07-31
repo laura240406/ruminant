@@ -325,6 +325,8 @@ class MediaParser(object):
                 obu["film-grain-params-present"] = buf.rb(1)
 
                 buf.align()
+            case "Temporal Delimiter":
+                pass
             case _:
                 obu["unknown"] = True
 
@@ -3944,6 +3946,20 @@ class DuckIvfModule(module.RuminantModule):
         meta["unused"] = self.buf.ru32l()
 
         self.buf.sapunit()
+
+        match meta["format"]:
+            case "AV01":
+                with self.buf:
+                    length = self.buf.ru32l()
+                    self.buf.skip(8)
+
+                    self.buf.pasunit(length)
+
+                    meta["first-sample-obus"] = []
+                    while self.buf.hasunit():
+                        meta["first-sample-obus"].append(MediaParser.read_av1_obu(self.buf))
+
+                    self.buf.sapunit()
 
         for i in range(0, meta["frame-count"]):
             self.buf.skip(self.buf.ru32l() + 8)
