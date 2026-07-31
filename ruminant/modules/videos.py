@@ -1,6 +1,7 @@
 import uuid
 import struct
 import datetime
+import math
 from .. import module, utils, ruminant_types
 from ..buf import Buf
 from . import chew
@@ -74,6 +75,51 @@ class MediaParser(object):
                     return nal
 
                 # TODO: implement rest
+                buf.align()
+                nal["rest"] = buf.rh(buf.unit)
+            case "Picture parameter set":
+                nal["pic-parameter-set-id"] = buf.rue()
+                nal["seq-parameter-set-id"] = buf.rue()
+                nal["entropy-coding-mode-flag"] = buf.rb(1)
+                nal["bottom-field-pic-order-in-frame-present-flag"] = buf.rb(1)
+                nal["num-slice-groups-minus-one"] = buf.rue()
+
+                if nal["num-slice-groups-minus-one"] > 0:
+                    nal["slice-group-map-type"] = buf.rue()
+
+                    match nal["slice-group-map-type"]:
+                        case 0:
+                            nal["run-length-minus-one"] = [buf.rue() for i in range(0, nal["num-slice-groups-minus-one"] + 1)]
+                        case 1:
+                            nal["top-left-and-bottom-right"] = [
+                                (buf.rue(), buf.rue()) for i in range(0, nal["num-slice-groups-minus-one"] + 1)
+                            ]
+                        case 3 | 4 | 5:
+                            nal["slice-group-change-direction-flag-and-rate-minus-one"] = [
+                                (buf.rb(1), buf.rue()) for i in range(0, nal["num-slice-groups-minus-one"] + 1)
+                            ]
+                        case 6:
+                            nal["pic-size-in-map-units-minus-one"] = buf.rue()
+                            v = math.ceil(math.log2(nal["num-slice-groups-minus-one"] + 1))
+                            nal["slice-group-id"] = [buf.rb(v) for i in range(0, nal["pic-size-in-map-units-minus-one"] + 1)]
+
+                nal["num-ref-idx-l0-default-active-minus-one"] = buf.rue()
+                nal["num-ref-idx-l1-default-active-minus-one"] = buf.rue()
+                nal["weighted-pred-flag"] = buf.rb(1)
+                nal["weighted-bipred-idc"] = buf.rb(2)
+                nal["pic-init-qp-minus26"] = buf.rse()
+                nal["pic-init-qs-minus26"] = buf.rse()
+                nal["chroma-qp-index-offset"] = buf.rse()
+                nal["deblocking-filter-control-present-flag"] = buf.rb(1)
+                nal["constrained-intra-pred-flag"] = buf.rb(1)
+                nal["redundant-pic-cnt-present-flag"] = buf.rb(1)
+
+                if buf.available() > 0 and not (buf._bits == 0 and buf.pu8() == 0x80):
+                    nal["transform_8x8_mode_flag"] = buf.rb(1)
+                    nal["pic_scaling_matrix_present_flag"] = buf.rb(1)
+
+                    # TODO
+
                 buf.align()
                 nal["rest"] = buf.rh(buf.unit)
             case "Supplemental Enhancement Information":

@@ -729,6 +729,15 @@ class Buf(object):
         with self:
             return self.rue()
 
+    def rse(self):
+        k = self.rue()
+        val = (k + 1) // 2
+        return val if (k & 1) else -val
+
+    def pse(self):
+        with self:
+            return self.rse()
+
     def riue(self):
         value = 1
 
