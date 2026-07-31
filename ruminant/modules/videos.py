@@ -17,7 +17,7 @@ def mp4_decode_language(lang_bytes):
     return chr(c1) + chr(c2) + chr(c3)
 
 
-class MediaParser(object):
+class FFMpreg(object):
     @staticmethod
     def read_h264_nalu(buf: Buf, slim=False) -> dict:
         buf = Buf(
@@ -706,14 +706,14 @@ class IsoModule(module.RuminantModule):
             atom["data"]["sequence-parameter-sets"] = []
             for i in range(0, atom["data"]["sequence-parameter-set-count"]):
                 self.buf.pasunit(self.buf.ru16())
-                atom["data"]["sequence-parameter-sets"].append(MediaParser.read_h264_nalu(self.buf))
+                atom["data"]["sequence-parameter-sets"].append(FFMpreg.read_h264_nalu(self.buf))
                 self.buf.sapunit()
 
             atom["data"]["picture-parameter-set-count"] = self.buf.ru8()
             atom["data"]["picture-parameter-sets"] = []
             for i in range(0, atom["data"]["picture-parameter-set-count"]):
                 self.buf.pasunit(self.buf.ru16())
-                atom["data"]["picture-parameter-sets"].append(MediaParser.read_h264_nalu(self.buf))
+                atom["data"]["picture-parameter-sets"].append(FFMpreg.read_h264_nalu(self.buf))
                 self.buf.sapunit()
 
             if atom["data"]["avc-profile-indication"] not in (66, 77, 88):
@@ -729,7 +729,7 @@ class IsoModule(module.RuminantModule):
                     atom["data"]["picture-parameter-set-exts"] = []
                     for i in range(0, atom["data"]["picture-parameter-set-ext-count"]):
                         self.buf.pasunit(self.buf.ru16())
-                        atom["data"]["picture-parameter-set-exts"].append(MediaParser.read_h264_nalu(self.buf))
+                        atom["data"]["picture-parameter-set-exts"].append(FFMpreg.read_h264_nalu(self.buf))
                         self.buf.sapunit()
         elif typ == "colr":
             if self.mode == "jp2":
@@ -956,7 +956,7 @@ class IsoModule(module.RuminantModule):
 
                     self.buf.pasunit(entry["nalu-length"])
 
-                    entry["nalu"] = MediaParser.read_h265_nalu(self.buf)
+                    entry["nalu"] = FFMpreg.read_h265_nalu(self.buf)
 
                     self.buf.sapunit()
 
@@ -1263,7 +1263,7 @@ class IsoModule(module.RuminantModule):
             atom["data"]["initial-presentation-delay-minus-one"] = temp & 0x0f
             atom["data"]["obus"] = []
             while self.buf.unit > 0:
-                atom["data"]["obus"].append(MediaParser.read_av1_obu(self.buf))
+                atom["data"]["obus"].append(FFMpreg.read_av1_obu(self.buf))
         elif typ == "ipma":
             version = self.read_version(atom)
             item_count = self.buf.ru32() if version > 0 else self.buf.ru16()
@@ -1972,7 +1972,7 @@ class IsoModule(module.RuminantModule):
 
                     self.buf.pasunit(nalu["length"])
 
-                    nalu["payload"] = MediaParser.read_h264_nalu(self.buf)(slim=True)
+                    nalu["payload"] = FFMpreg.read_h264_nalu(self.buf)(slim=True)
 
                     self.buf.sapunit()
 
@@ -1988,7 +1988,7 @@ class IsoModule(module.RuminantModule):
                         self.buf.pasunit(sample_sizes[i])
 
                         while self.buf.unit > 0:
-                            picture.append(MediaParser.read_av1_obu(self.buf))
+                            picture.append(FFMpreg.read_av1_obu(self.buf))
 
                         data["pictures"].append(picture)
                         self.buf.sapunit()
@@ -1998,7 +1998,7 @@ class IsoModule(module.RuminantModule):
 
                     data["obus"] = []
                     while self.buf.unit > 0:
-                        data["obus"].append(MediaParser.read_av1_obu(self.buf))
+                        data["obus"].append(FFMpreg.read_av1_obu(self.buf))
 
                     self.buf.sapunit()
             case "tx3g":
@@ -2022,7 +2022,7 @@ class IsoModule(module.RuminantModule):
 
                     self.buf.pasunit(nalu["length"])
 
-                    nalu["payload"] = MediaParser.read_h265_nalu(self.buf)
+                    nalu["payload"] = FFMpreg.read_h265_nalu(self.buf)
 
                     self.buf.sapunit()
 
@@ -2045,7 +2045,7 @@ class IsoModule(module.RuminantModule):
     def process_heic_picture(self, codec, picture):
         picture["obus"] = []
         while picture["buf"].available():
-            picture["obus"].append(MediaParser.read_av1_obu(picture["buf"]))
+            picture["obus"].append(FFMpreg.read_av1_obu(picture["buf"]))
 
         del picture["buf"]
 
@@ -2577,14 +2577,14 @@ class MatroskaModule(module.RuminantModule):
                         parsed["sequence-parameter-sets"] = []
                         for i in range(0, parsed["sequence-parameter-set-count"]):
                             self.buf.pasunit(self.buf.ru16())
-                            parsed["sequence-parameter-sets"].append(MediaParser.read_h264_nalu(self.buf))
+                            parsed["sequence-parameter-sets"].append(FFMpreg.read_h264_nalu(self.buf))
                             self.buf.sapunit()
 
                         parsed["picture-parameter-set-count"] = self.buf.ru8()
                         parsed["picture-parameter-sets"] = []
                         for i in range(0, parsed["picture-parameter-set-count"]):
                             self.buf.pasunit(self.buf.ru16())
-                            parsed["picture-parameter-sets"].append(MediaParser.read_h264_nalu(self.buf))
+                            parsed["picture-parameter-sets"].append(FFMpreg.read_h264_nalu(self.buf))
                             self.buf.sapunit()
 
                         if (
@@ -2602,7 +2602,7 @@ class MatroskaModule(module.RuminantModule):
                             parsed["sequence-parameter-ext-sets"] = []
                             for i in range(0, parsed["sequence-parameter-set-ext-count"]):
                                 self.buf.pasunit(self.buf.ru16())
-                                parsed["sequence-parameter-ext-sets"].append(MediaParser.read_h264_nalu(self.buf))
+                                parsed["sequence-parameter-ext-sets"].append(FFMpreg.read_h264_nalu(self.buf))
                                 self.buf.sapunit()
 
                         codec_privates[stream["id"]]["parsed"] = parsed
@@ -2616,7 +2616,7 @@ class MatroskaModule(module.RuminantModule):
 
                         self.buf.pasunit(nalu["length"])
 
-                        nalu["payload"] = MediaParser.read_h264_nalu(self.buf, slim=True)
+                        nalu["payload"] = FFMpreg.read_h264_nalu(self.buf, slim=True)
 
                         self.buf.sapunit()
 
@@ -2676,7 +2676,7 @@ class MatroskaModule(module.RuminantModule):
 
                                 self.buf.pasunit(entry["nalu-length"])
 
-                                entry["nalu"] = MediaParser.read_h265_nalu(self.buf)
+                                entry["nalu"] = FFMpreg.read_h265_nalu(self.buf)
 
                                 self.buf.sapunit()
 
@@ -2695,7 +2695,7 @@ class MatroskaModule(module.RuminantModule):
 
                         self.buf.pasunit(nalu["length"])
 
-                        nalu["payload"] = MediaParser.read_h265_nalu(self.buf)
+                        nalu["payload"] = FFMpreg.read_h265_nalu(self.buf)
 
                         self.buf.sapunit()
 
@@ -2737,14 +2737,14 @@ class MatroskaModule(module.RuminantModule):
 
                         parsed["obus"] = []
                         while self.buf.hasunit():
-                            parsed["obus"].append(MediaParser.read_av1_obu(self.buf))
+                            parsed["obus"].append(FFMpreg.read_av1_obu(self.buf))
 
                         codec_privates[stream["id"]]["parsed"] = parsed
                         self.buf.sapunit()
 
                     stream["first-sample-obus"] = []
                     while self.buf.hasunit():
-                        stream["first-sample-obus"].append(MediaParser.read_av1_obu(self.buf))
+                        stream["first-sample-obus"].append(FFMpreg.read_av1_obu(self.buf))
                 case "V_DIRAC":
                     with self.buf.subunit():
                         stream["first-sample"] = chew(self.buf)
@@ -4003,7 +4003,7 @@ class DuckIvfModule(module.RuminantModule):
 
                     meta["first-sample-obus"] = []
                     while self.buf.hasunit():
-                        meta["first-sample-obus"].append(MediaParser.read_av1_obu(self.buf))
+                        meta["first-sample-obus"].append(FFMpreg.read_av1_obu(self.buf))
 
                     self.buf.sapunit()
 
