@@ -1801,77 +1801,112 @@ class IsoModule(module.RuminantModule):
             return self.process_heic_mdat(atoms)
 
         moov = self.get_all(atoms, "moov")[0]["data"]["atoms"]
-        traks = self.get_all(moov, "trak")
 
-        streams = []
-        for trak in traks:
-            mdia = self.get_all(trak["data"]["atoms"], "mdia")[0]
-            minf = self.get_all(mdia["data"]["atoms"], "minf")[0]
-            stbl = self.get_all(minf["data"]["atoms"], "stbl")[0]
-            stsd = self.get_all(stbl["data"]["atoms"], "stsd")[0]
-            stco_co64 = self.get_all(stbl["data"]["atoms"], ("stco", "co64"))[0]
-            stsc = self.get_all(stbl["data"]["atoms"], "stsc")[0]
-            stsz = self.get_all(stbl["data"]["atoms"], "stsz")[0]
+        if len(self.get_all(moov, "mvex")) > 0:
+            traks = self.get_all(moov, "trak")
 
-            codec = stsd["data"]["atoms"][0]["type"]
+            streams = []
+            for trak in traks:
+                mdia = self.get_all(trak["data"]["atoms"], "mdia")[0]
+                tkhd = self.get_all(trak["data"]["atoms"], "tkhd")[0]
+                minf = self.get_all(mdia["data"]["atoms"], "minf")[0]
+                stbl = self.get_all(minf["data"]["atoms"], "stbl")[0]
+                stsd = self.get_all(stbl["data"]["atoms"], "stsd")[0]
 
-            stream = {}
-            stream["type"] = codec
+                codec = stsd["data"]["atoms"][0]["type"]
+                sample_to_offset = []
+                sample_sizes = []
 
-            self.buf.seek(stsz["offset"])
-            self.buf.pasunit(stsz["length"])
+                track_id = tkhd["data"]["atoms"]["track-id"]
+                moofs = self.get_all(atoms, "moof")
+                for moof in moofs:
+                    trafs = self.get_all(moof["data"]["atoms"], "traf")[0]
 
-            self.buf.skip(12)
-            sample_size = self.buf.ru32()
-            sample_count = self.buf.ru32()
+                    for traf in trafs:
+                        if self.get_all(traf["data"]["atoms"], "tfhd")[0]["data"]["atoms"]["track-id"] != track_id:
+                            continue
 
-            if sample_size:
-                sample_sizes = [sample_size] * sample_count
-            else:
-                temp = self.buf.read(4 * sample_count)
-                sample_sizes = [int.from_bytes(temp[i : i + 4], "big") for i in range(0, 4 * sample_count, 4)]
+                        trun = self.get_all(traf["data"]["atoms"], "trun")[0]
 
-            self.buf.sapunit()
+                stream = {}
+                stream["type"] = codec
 
-            self.buf.seek(stco_co64["offset"])
-            self.buf.pasunit(stco_co64["length"])
+                stream["sample-count"] = len(sample_to_offset)
+                stream["data"] = self.process_stream(stsd["data"]["atoms"][0], sample_to_offset, sample_sizes, atoms)
 
-            self.buf.skip(12)
-            chunk_count = self.buf.ru32()
+                streams.append(stream)
+        else:
+            traks = self.get_all(moov, "trak")
 
-            if stco_co64["type"] == "stco":
-                temp = self.buf.read(4 * chunk_count)
-                chunk_offsets = [int.from_bytes(temp[i : i + 4], "big") for i in range(0, 4 * chunk_count, 4)]
-            else:
-                temp = self.buf.read(8 * chunk_count)
-                chunk_offsets = [int.from_bytes(temp[i : i + 8], "big") for i in range(0, 8 * chunk_count, 8)]
+            streams = []
+            for trak in traks:
+                mdia = self.get_all(trak["data"]["atoms"], "mdia")[0]
+                minf = self.get_all(mdia["data"]["atoms"], "minf")[0]
+                stbl = self.get_all(minf["data"]["atoms"], "stbl")[0]
+                stsd = self.get_all(stbl["data"]["atoms"], "stsd")[0]
+                stco_co64 = self.get_all(stbl["data"]["atoms"], ("stco", "co64"))[0]
+                stsc = self.get_all(stbl["data"]["atoms"], "stsc")[0]
+                stsz = self.get_all(stbl["data"]["atoms"], "stsz")[0]
 
-            self.buf.sapunit()
+                codec = stsd["data"]["atoms"][0]["type"]
 
-            self.buf.seek(stsc["offset"])
-            self.buf.pasunit(stsc["length"])
+                stream = {}
+                stream["type"] = codec
 
-            self.buf.skip(12)
-            entries = [(self.buf.ru32(), self.buf.ru32(), self.buf.ru32()) for i in range(0, self.buf.ru32())]
+                self.buf.seek(stsz["offset"])
+                self.buf.pasunit(stsz["length"])
 
-            entries.append((chunk_count + 1, 1, 1))
-            sample_to_offset = []
-            for i in range(0, len(entries) - 1):
-                start_chunk, sample_count, _ = entries[i]
-                end_chunk, _, _ = entries[i + 1]
+                self.buf.skip(12)
+                sample_size = self.buf.ru32()
+                sample_count = self.buf.ru32()
 
-                for i in range(start_chunk, end_chunk):
-                    chunk_offset = chunk_offsets[i - 1]
-                    for j in range(0, sample_count):
-                        sample_to_offset.append(chunk_offset)
-                        chunk_offset += sample_sizes[len(sample_to_offset) - 1]
+                if sample_size:
+                    sample_sizes = [sample_size] * sample_count
+                else:
+                    temp = self.buf.read(4 * sample_count)
+                    sample_sizes = [int.from_bytes(temp[i : i + 4], "big") for i in range(0, 4 * sample_count, 4)]
 
-            self.buf.popunit()
+                self.buf.sapunit()
 
-            stream["sample-count"] = len(sample_to_offset)
-            stream["data"] = self.process_stream(stsd["data"]["atoms"][0], sample_to_offset, sample_sizes, atoms)
+                self.buf.seek(stco_co64["offset"])
+                self.buf.pasunit(stco_co64["length"])
 
-            streams.append(stream)
+                self.buf.skip(12)
+                chunk_count = self.buf.ru32()
+
+                if stco_co64["type"] == "stco":
+                    temp = self.buf.read(4 * chunk_count)
+                    chunk_offsets = [int.from_bytes(temp[i : i + 4], "big") for i in range(0, 4 * chunk_count, 4)]
+                else:
+                    temp = self.buf.read(8 * chunk_count)
+                    chunk_offsets = [int.from_bytes(temp[i : i + 8], "big") for i in range(0, 8 * chunk_count, 8)]
+
+                self.buf.sapunit()
+
+                self.buf.seek(stsc["offset"])
+                self.buf.pasunit(stsc["length"])
+
+                self.buf.skip(12)
+                entries = [(self.buf.ru32(), self.buf.ru32(), self.buf.ru32()) for i in range(0, self.buf.ru32())]
+
+                entries.append((chunk_count + 1, 1, 1))
+                sample_to_offset = []
+                for i in range(0, len(entries) - 1):
+                    start_chunk, sample_count, _ = entries[i]
+                    end_chunk, _, _ = entries[i + 1]
+
+                    for i in range(start_chunk, end_chunk):
+                        chunk_offset = chunk_offsets[i - 1]
+                        for j in range(0, sample_count):
+                            sample_to_offset.append(chunk_offset)
+                            chunk_offset += sample_sizes[len(sample_to_offset) - 1]
+
+                self.buf.popunit()
+
+                stream["sample-count"] = len(sample_to_offset)
+                stream["data"] = self.process_stream(stsd["data"]["atoms"][0], sample_to_offset, sample_sizes, atoms)
+
+                streams.append(stream)
 
         return streams
 
