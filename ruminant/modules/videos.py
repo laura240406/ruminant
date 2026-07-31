@@ -1208,7 +1208,7 @@ class IsoModule(module.RuminantModule):
             atom["data"]["monochrome"] = bool(temp & 0x10)
             atom["data"]["chroma-subsampling-x"] = bool(temp & 0x08)
             atom["data"]["chroma-subsampling-y"] = bool(temp & 0x04)
-            atom["data"]["chroma-sample-poisition"] = temp & 0x03
+            atom["data"]["chroma-sample-position"] = temp & 0x03
             temp = self.buf.ru8()
             atom["data"]["reserved"] = temp >> 5
             atom["data"]["initial-presentation-delay-present"] = bool(temp & 0x10)
@@ -2681,7 +2681,7 @@ class MatroskaModule(module.RuminantModule):
                         parsed["monochrome"] = bool(temp & 0x10)
                         parsed["chroma-subsampling-x"] = bool(temp & 0x08)
                         parsed["chroma-subsampling-y"] = bool(temp & 0x04)
-                        parsed["chroma-sample-poisition"] = temp & 0x03
+                        parsed["chroma-sample-position"] = temp & 0x03
                         temp = self.buf.ru8()
                         parsed["reserved"] = temp >> 5
                         parsed["initial-presentation-delay-present"] = bool(temp & 0x10)
@@ -2700,6 +2700,94 @@ class MatroskaModule(module.RuminantModule):
                 case "V_DIRAC":
                     with self.buf.subunit():
                         stream["first-sample"] = chew(self.buf)
+                case "A_VORBIS":
+                    with self.buf:
+                        self.buf.seek(codec_privates[stream["id"]]["data-offset"])
+                        self.buf.pasunit(codec_privates[stream["id"]]["length"])
+
+                        parsed["header-count"] = self.buf.ru8() + 1
+
+                        parsed["headers"] = []
+                        for i in range(0, parsed["header-count"] - 1):
+                            header = {}
+
+                            length = 0
+                            while True:
+                                c = self.buf.ru8()
+                                length += c
+
+                                if c != 0xff:
+                                    break
+
+                            header["length"] = length
+
+                            parsed["headers"].append(header)
+
+                        parsed["headers"].append({"length": self.buf.unit - sum([x["length"] for x in parsed["headers"]])})
+
+                        for header in parsed["headers"]:
+                            self.buf.pasunit(header["length"])
+
+                            header["type"] = utils.unraw(self.buf.ru8(), 1, {0x01: "Id", 0x03: "Comment", 0x05: "Setup"}, True)
+                            self.buf.skip(6)
+
+                            match header["type"]:
+                                case "Id":
+                                    header["version"] = self.buf.ru32l()
+                                    header["channel-count"] = self.buf.ru8()
+                                    header["sample-rate"] = self.buf.ru32l()
+                                    header["bitrate-maximum"] = self.buf.ru32l()
+                                    header["bitrate-nominal"] = self.buf.ru32l()
+                                    header["bitrate-minimum"] = self.buf.ru32l()
+                                    temp = self.buf.ru8()
+                                    header["blocksize-small"] = 2 ** (temp & 0x03)
+                                    header["blocksize-large"] = 2 ** (temp >> 4)
+                                    header["framing-flag"] = self.buf.ru8()
+                                case "Comment":
+                                    header["vendor-string"] = self.buf.rs(self.buf.ru32l())
+
+                                    header["user-strings"] = []
+                                    for i in range(0, self.buf.ru32l()):
+                                        header["user-strings"].append(self.buf.rs(self.buf.ru32l()))
+
+                                    header["framing-flag"] = self.buf.ru8()
+                                case "Setup":
+                                    pass
+                                case _:
+                                    header["unknown"] = True
+
+                            self.buf.sapunit()
+
+                        codec_privates[stream["id"]]["parsed"] = parsed
+                        self.buf.sapunit()
+
+                    with self.buf.subunit():
+                        stream["first-sample"] = chew(self.buf, blob_mode=True)
+                case "A_OPUS":
+                    with self.buf:
+                        self.buf.seek(codec_privates[stream["id"]]["data-offset"])
+                        self.buf.pasunit(codec_privates[stream["id"]]["length"])
+
+                        self.buf.skip(8)
+                        parsed["version"] = self.buf.ru8()
+                        channel_count = self.buf.ru8()
+                        parsed["channel-count"] = channel_count
+                        parsed["pre-skip"] = self.buf.ru16l()
+                        parsed["input-sample-rate"] = self.buf.ru32l()
+                        parsed["output-gain"] = self.buf.ri16() / 256
+                        mapping = self.buf.ru8()
+                        parsed["channel-mapping"] = mapping
+
+                        if mapping > 0:
+                            parsed["stream-count"] = self.buf.ru8()
+                            parsed["coupled-count"] = self.buf.ru8()
+                            parsed["channel-mapping-table"] = [self.buf.ru8() for i in range(0, channel_count)]
+
+                        codec_privates[stream["id"]]["parsed"] = parsed
+                        self.buf.sapunit()
+
+                    with self.buf.subunit():
+                        stream["first-sample"] = chew(self.buf, blob_mode=True)
                 case _:
                     if stream["id"] in codec_privates:
                         with self.buf:
