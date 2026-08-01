@@ -1972,7 +1972,7 @@ class IsoModule(module.RuminantModule):
 
                     self.buf.pasunit(nalu["length"])
 
-                    nalu["payload"] = FFMpreg.read_h264_nalu(self.buf)(slim=True)
+                    nalu["payload"] = FFMpreg.read_h264_nalu(self.buf, slim=True)
 
                     self.buf.sapunit()
 
