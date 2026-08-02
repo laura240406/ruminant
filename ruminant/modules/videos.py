@@ -396,17 +396,17 @@ class FFMpreg(object):
         nal["unit-type"] = utils.unraw(
             buf.rb(6),
             1,
-            {0x20: "VPS", 0x21: "SPS", 0x22: "PPS", 0x27: "Prefix SEI", 0x28: "Suffix SEI"},
+            {0x20: "VPS", 0x21: "SPS", 0x22: "PPS", 0x23: "AUD", 0x27: "Prefix SEI", 0x28: "Suffix SEI"},
             True,
         )
         nal["nuh-layer-id"] = buf.rb(6)
         nal["nuh-temporal-id-plus-one"] = buf.rb(3)
 
         match nal["unit-type"]:
-            case "Prefix SEI":
+            case "Prefix SEI" | "Suffix SEI":
                 nal["seis"] = []
 
-                while buf.available():
+                while buf.available() > 1:
                     typ = 0
                     while True:
                         part = buf.ru8()
@@ -424,8 +424,21 @@ class FFMpreg(object):
                             break
 
                     sei = {}
-                    sei["type"] = utils.unraw(typ, 1, {0x05: "user_data_unregistered"}, True)
+                    sei["type"] = utils.unraw(
+                        typ,
+                        1,
+                        {
+                            0x00: "buffering_period",
+                            0x04: "user_data_registered_itu_t_t35",
+                            0x05: "user_data_unregistered",
+                            0x89: "mastering_display_colour_volume",
+                            0x90: "content_light_level_info",
+                        },
+                        True,
+                    )
                     sei["length"] = length
+
+                    buf.pasunit(length)
 
                     match sei["type"]:
                         case "user_data_unregistered":
@@ -433,11 +446,27 @@ class FFMpreg(object):
 
                             match sei["uuid"]:
                                 case "2ca2de09-b517-47db-bb55-a4fe7fc2fc4e":
-                                    sei["string"] = buf.rs(buf.available())
+                                    sei["string"] = buf.rs(buf.unit)
                                 case _:
-                                    sei["payload"] = buf.rh(buf.available())
+                                    sei["payload"] = buf.rh(buf.unit)
+                        case "mastering_display_colour_volume":
+                            sei["display-primaries"] = [(buf.ru16(), buf.ru16()) for i in range(0, 3)]
+                            sei["white-point"] = (buf.ru16(), buf.ru16())
+                            sei["max-display-mastering-luminance"] = buf.ru32()
+                            sei["min-display-mastering-luminance"] = buf.ru32()
+                        case "content_light_level_info":
+                            sei["max-content-light-level"] = buf.ru16()
+                            sei["max-pic-average-light-level"] = buf.ru16()
+                        case _:
+                            sei["payload"] = buf.rh(min(buf.unit if buf.unit is not None else 2**64, buf.available()))
+                            sei["unknown"] = True
+
+                    buf.sapunit()
 
                     nal["seis"].append(sei)
+            case "AUD":
+                nal["pic-type"] = utils.unraw(buf.rb(3), 1, {0x00: "I", 0x01: "P/I", 0x02: "B/P/I"}, True)
+                buf.align()
             case _:
                 nal["unknown"] = True
 
@@ -1740,6 +1769,54 @@ class IsoModule(module.RuminantModule):
             atom["data"]["intra-pred-used"] = self.buf.rb(1)
             atom["data"]["max-ref-per-pic"] = self.buf.rb(4)
             atom["data"]["reserved"] = self.buf.rb(26)
+        elif typ == "kind":
+            self.read_version(atom)
+            atom["data"]["scheme-uri"] = self.buf.rzs()
+
+            if self.buf.unit > 0:
+                atom["data"]["value"] = self.buf.rzs()
+        elif typ == "dvvC":
+            atom["data"]["version"] = f"{self.buf.ru8()}.{self.buf.ru8()}"
+            atom["data"]["profile"] = self.buf.rb(7)
+            atom["data"]["level"] = self.buf.rb(6)
+            atom["data"]["rpu-present-flag"] = self.buf.rb(1)
+            atom["data"]["el-present-flag"] = self.buf.rb(1)
+            atom["data"]["bl-present-flag"] = self.buf.rb(1)
+            atom["data"]["bl-signal-compatability-id"] = utils.unraw(
+                self.buf.rb(4), 1, {0x00: "None", 0x01: "HDR10", 0x02: "SDR / Rec.709", 0x03: "HLG"}, True
+            )
+            atom["data"]["reserved1"] = self.buf.rb(4)
+            atom["data"]["reserved2"] = self.buf.rh(self.buf.unit)
+        elif typ == "dec3":
+            atom["data"]["data-rate"] = self.buf.rb(13)
+            atom["data"]["num-ind-sub"] = self.buf.rb(3)
+
+            atom["data"]["ind-subs"] = []
+            for i in range(0, atom["data"]["num-ind-sub"] + 1):
+                sub = {}
+                sub["fscod"] = utils.unraw(self.buf.rb(2), 1, {0x00: "48 kHz", 0x01: "44.1 kHz", 0x02: "32 kHz"}, True)
+                sub["bsid"] = self.buf.rb(5)
+                sub["asvc"] = self.buf.rb(1)
+                sub["bsmod"] = self.buf.rb(3)
+                sub["acmod"] = self.buf.rb(3)
+                sub["lfeon"] = self.buf.rb(1)
+                sub["num-dep-sub"] = self.buf.rb(4)
+
+                if sub["num-dep-sub"] > 0:
+                    sub["chan-loc"] = self.buf.rb(9)
+                else:
+                    sub["reserved"] = self.buf.rb(1)
+
+                atom["data"]["ind-subs"].append(sub)
+
+            if self.buf.unit > 0:
+                atom["data"]["reserved"] = self.buf.rb(1)
+                atom["data"]["flag-ec3-extension-type-a"] = self.buf.rb(1)
+
+                if atom["data"]["flag-ec3-extension-type-a"]:
+                    atom["data"]["complexity-index-type-a"] = self.buf.rb(8)
+
+            self.buf.align()
         elif typ[0] == "©" or typ in ("iods", "SDLN", "smrd"):
             if typ[:2] == "©T" and self.buf.pu16() == self.buf.unit - 4:
                 length = self.buf.ru16()
@@ -1846,7 +1923,7 @@ class IsoModule(module.RuminantModule):
 
     def parse_mdat(self, atoms):
         if self.get_all(atoms, "ftyp")[0]["data"]["major-brand"] in ("avif", "heic"):
-            return self.process_heic_mdat(atoms)
+            return self.process_heif_mdat(atoms)
 
         moov = self.get_all(atoms, "moov")[0]["data"]["atoms"]
         traks = self.get_all(moov, "trak")
@@ -1923,7 +2000,7 @@ class IsoModule(module.RuminantModule):
 
         return streams
 
-    def process_heic_mdat(self, atoms):
+    def process_heif_mdat(self, atoms):
         meta = self.get_all(atoms, "meta")[0]["data"]["atoms"]
         iloc = self.get_all(meta, "iloc")[0]
         iprp = self.get_all(meta, "iprp")[0]["data"]["atoms"]
@@ -1948,7 +2025,7 @@ class IsoModule(module.RuminantModule):
 
             picture["buf"] = Buf(data)
 
-            self.process_heic_picture(codec, picture)
+            self.process_heif_picture(codec, picture)
             pictures.append(picture)
 
         return pictures
@@ -2042,7 +2119,7 @@ class IsoModule(module.RuminantModule):
 
         return data
 
-    def process_heic_picture(self, codec, picture):
+    def process_heif_picture(self, codec, picture):
         picture["obus"] = []
         while picture["buf"].available():
             picture["obus"].append(FFMpreg.read_av1_obu(picture["buf"]))
