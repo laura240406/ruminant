@@ -1922,7 +1922,7 @@ class IsoModule(module.RuminantModule):
         return result
 
     def parse_mdat(self, atoms):
-        if self.get_all(atoms, "ftyp")[0]["data"]["major-brand"] in ("avif", "heic"):
+        if self.get_all(atoms, "ftyp")[0]["data"]["major-brand"] in ("avif", "heic", "mif1"):
             return self.process_heif_mdat(atoms)
 
         moov = self.get_all(atoms, "moov")[0]["data"]["atoms"]
@@ -2008,7 +2008,7 @@ class IsoModule(module.RuminantModule):
 
         codec = None
         for atom in ipco:
-            if atom["type"] in ("av1C", "hvcC"):
+            if atom["type"] in ("av1C", "hvcC", "avcC"):
                 codec = atom["type"]
                 break
 
