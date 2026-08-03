@@ -2107,6 +2107,9 @@ class IsoModule(module.RuminantModule):
                     atom["data"]["complexity-index-type-a"] = self.buf.rb(8)
 
             self.buf.align()
+        elif typ == "mett":
+            atom["data"]["content-encoding"] = self.buf.rzs()
+            atom["data"]["mime-format"] = self.buf.rzs()
         elif typ[0] == "©" or typ in ("iods", "SDLN", "smrd"):
             if typ[:2] == "©T" and self.buf.pu16() == self.buf.unit - 4:
                 length = self.buf.ru16()
@@ -2416,6 +2419,19 @@ class IsoModule(module.RuminantModule):
                     self.buf.sapunit()
 
                     data["first-sample-nals"].append(nalu)
+
+                self.buf.sapunit()
+            case "mett":
+                self.buf.seek(sample_to_offset[0])
+                self.buf.pasunit(sample_sizes[0])
+
+                self.buf.skip(3)
+                data["first-sample"] = utils.read_protobuf(
+                    self.buf,
+                    self.buf.unit,
+                    True,
+                    {0: {14: {}}, 10: {}, 13: "float", 14: "float", 15: "float", 16: "float", 18: {}},
+                )
 
                 self.buf.sapunit()
             case "mp4a" | "mp4v" | "drac":
