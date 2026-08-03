@@ -172,7 +172,39 @@ class FFMpreg(object):
     }
 
     @staticmethod
-    def read_h264_nalu(buf: Buf, slim=False) -> dict:
+    def read_h264_scaling_list(buf, count):
+        last_scale = 8
+        next_scale = 8
+
+        lst = []
+        for i in range(0, count):
+            if next_scale != 0:
+                delta_scale = buf.rue()
+
+                next_scale = (last_scale + delta_scale + 256) % 256
+
+            lst.append(last_scale if next_scale == 0 else next_scale)
+            last_scale = lst[-1]
+
+    @staticmethod
+    def read_h264_hrd_parameters(buf):
+        nal = {}
+        nal["cpb-cnt-minus1"] = buf.rue()
+        nal["bit-rate-scale"] = buf.rb(4)
+        nal["cpb-size-scale"] = buf.rb(4)
+        nal["list"] = [
+            {"bit-rate-value-minus1": buf.rue(), "cpb-size-value-minus1": buf.rue(), "cbr-flag": buf.rb(1)}
+            for i in range(0, nal["cpb-cnt-minus1"] + 1)
+        ]
+        nal["initial-cpb-removal-delay-length-minus1"] = buf.rb(5)
+        nal["cpb-removal-delay-length-minus1"] = buf.rb(5)
+        nal["dpb-output-delay-length-minus1"] = buf.rb(5)
+        nal["time-offset-length"] = buf.rb(5)
+
+        return nal
+
+    @staticmethod
+    def read_h264_nalu(buf: Buf, slim=False, state={}) -> dict:
         buf = Buf(
             buf
             .read(buf.unit)
@@ -218,15 +250,124 @@ class FFMpreg(object):
                     139,
                     244,
                 ):
-                    # TODO: scaling lists look annoying and like a problem for later
-                    buf.align()
-                    nal["rest"] = buf.rh(buf.unit)
-                    nal["unknown"] = True
-                    return nal
+                    nal["chroma-format-idc"] = buf.rue()
+                    state["chroma-format-idc"] = nal["chroma-format-idc"]
 
-                # TODO: implement rest
+                    if nal["chroma-format-idc"] == 3:
+                        nal["separate-colour-plane-flag"] = buf.rb(1)
+
+                    nal["bit-depth-luma-minus-eight"] = buf.rue()
+                    nal["bit-depth-chroma-minus-eight"] = buf.rue()
+                    nal["qpprime-y-zero-transform-bypass-flag"] = buf.rb(1)
+                    nal["seq-scaling-matrix-present-flag"] = buf.rb(1)
+
+                    if nal["seq-scaling-matrix-present-flag"]:
+                        nal["seq-scaling-matrices"] = []
+                        for i in range(0, 12 if nal["chroma-format-idc"] == 3 else 8):
+                            matrix = []
+                            if buf.rb(1):
+                                matrix = FFMpreg.read_h264_scaling_list(buf, 16 if i < 6 else 64)
+
+                            nal["seq-scaling-matrices"].append(matrix)
+
+                nal["log2-max-frame-num-minus4"] = buf.rue()
+                nal["pic-order-cnt-type"] = buf.rue()
+
+                if nal["pic-order-cnt-type"] == 0:
+                    nal["log2-max-pic-order-cnt-lsb-minus4"] = buf.rue()
+                elif nal["pic-order-cnt-type"] == 1:
+                    nal["delta-pic-order-always-zero-flag"] = buf.rb(1)
+                    nal["offset-for-non-ref-pic"] = buf.rse()
+                    nal["offset-for-top-to-bottom-field"] = buf.rse()
+                    nal["num-ref-frames-in-pic-order-cnt-cycle"] = buf.rue()
+                    nal["offsets-for-ref-frame"] = [buf.rse() for i in range(0, nal["num-ref-frames-in-pic-order-cnt-cycle"])]
+
+                nal["max-num-ref-frames"] = buf.rue()
+                nal["gaps-in-frame-num-value-allowed-flag"] = buf.rb(1)
+                nal["pic-width-in-mbs-minus1"] = buf.rue()
+                nal["pic-height-in-map-units-minus1"] = buf.rue()
+                nal["frame-mbs-only-flag"] = buf.rb(1)
+
+                if not nal["frame-mbs-only-flag"]:
+                    nal["mb-adaptive-frame-field-flag"] = buf.rb(1)
+
+                nal["direct-8x8-inference-flag"] = buf.rb(1)
+                nal["frame-cropping-flag"] = buf.rb(1)
+
+                if nal["frame-cropping-flag"]:
+                    nal["frame-crop-left-offset"] = buf.rue()
+                    nal["frame-crop-right-offset"] = buf.rue()
+                    nal["frame-crop-top-offset"] = buf.rue()
+                    nal["frame-crop-bottom-offset"] = buf.rue()
+
+                nal["vui-parameters-present-flag"] = buf.rb(1)
+
+                if nal["vui-parameters-present-flag"]:
+                    nal["aspect-ratio-info-present-flag"] = buf.rb(1)
+
+                    if nal["aspect-ratio-info-present-flag"]:
+                        nal["aspect-ratio-idc"] = buf.rb(8)
+
+                        if nal["aspect-ratio-idc"] == 0xff:
+                            nal["sar-width"] = buf.rb(16)
+                            nal["sar-height"] = buf.rb(16)
+
+                    nal["overscan-info-present-flag"] = buf.rb(1)
+
+                    if nal["overscan-info-present-flag"]:
+                        nal["overscan-appropriate-flag"] = buf.rb(1)
+
+                    nal["video-signal-type-present-flag"] = buf.rb(1)
+
+                    if nal["video-signal-type-present-flag"]:
+                        nal["video-format"] = buf.rb(3)
+                        nal["video-full-range-flag"] = buf.rb(1)
+                        nal["colour-description-present-flag"] = buf.rb(1)
+
+                        if nal["colour-description-present-flag"]:
+                            nal["colour-primaries"] = buf.rb(8)
+                            nal["transfer-characteristics"] = buf.rb(8)
+                            nal["matrix-coefficients"] = buf.rb(8)
+
+                    nal["chroma-loc-info-present-flag"] = buf.rb(1)
+
+                    if nal["chroma-loc-info-present-flag"]:
+                        nal["chroma-sample-loc-type-top-field"] = buf.rue()
+                        nal["chroma-sample-loc-type-bottom-field"] = buf.rue()
+
+                    nal["timing-info-present-flag"] = buf.rb(1)
+
+                    if nal["timing-info-present-flag"]:
+                        nal["num-units-in-tick"] = buf.rb(32)
+                        nal["time-scale"] = buf.rb(32)
+                        nal["fixed-frame-rate-flag"] = buf.rb(1)
+
+                    nal["nal-hrd-parameters-present-flag"] = buf.rb(1)
+
+                    if nal["nal-hrd-parameters-present-flag"]:
+                        nal["hrd-parameters"] = FFMpreg.read_h264_hdr_parameters(buf)
+
+                    nal["vcl-hrd-parameters-present-flag"] = buf.rb(1)
+
+                    if nal["vcl-hrd-parameters-present-flag"]:
+                        nal["vcl-hrd-parameters"] = FFMpreg.read_h264_hdr_parameters(buf)
+
+                    if nal["nal-hrd-parameters-present-flag"] or nal["vcl-hrd-parameters-present-flag"]:
+                        nal["low-delay-hrd-flag"] = buf.rb(1)
+
+                    nal["pic-struct-present-flag"] = buf.rb(1)
+                    nal["bitstream-restriction-flag"] = buf.rb(1)
+
+                    if nal["bitstream-restriction-flag"]:
+                        nal["motion-vectors-over-pic-boundaries-flag"] = buf.rb(1)
+                        nal["max-bytes-per-pic-denom"] = buf.rue()
+                        nal["max-bits-per-mb-denom"] = buf.rue()
+                        nal["log2-max-mv-length-horizontal"] = buf.rue()
+                        nal["log2-max-mv-length-vertical"] = buf.rue()
+                        nal["num-reorder-frames"] = buf.rue()
+                        nal["max-dec-frame-buffering"] = buf.rue()
+
                 buf.align()
-                nal["rest"] = buf.rh(buf.unit)
             case "Picture parameter set":
                 nal["pic-parameter-set-id"] = buf.rue()
                 nal["seq-parameter-set-id"] = buf.rue()
@@ -265,8 +406,8 @@ class FFMpreg(object):
                 nal["redundant-pic-cnt-present-flag"] = buf.rb(1)
 
                 if buf.available() > 0 and not (buf._bits == 0 and buf.pu8() == 0x80):
-                    nal["transform_8x8_mode_flag"] = buf.rb(1)
-                    nal["pic_scaling_matrix_present_flag"] = buf.rb(1)
+                    nal["transform-8x8-mode-flag"] = buf.rb(1)
+                    nal["pic-scaling-matrix-present-flag"] = buf.rb(1)
 
                     # TODO
 
@@ -310,7 +451,7 @@ class FFMpreg(object):
         return nal
 
     @staticmethod
-    def read_av1_obu(buf: Buf) -> dict:
+    def read_av1_obu(buf: Buf, state={}) -> dict:
         obu = {}
         obu["forbidden-bit"] = buf.rb(1)
         obu["type"] = utils.unraw(
@@ -523,7 +664,7 @@ class FFMpreg(object):
         return obu
 
     @staticmethod
-    def read_h265_nalu(buf: Buf) -> dict:
+    def read_h265_nalu(buf: Buf, state={}) -> dict:
         buf = Buf(
             buf
             .read(buf.unit)
@@ -616,7 +757,7 @@ class FFMpreg(object):
         return nal
 
     @staticmethod
-    def read_h266_nalu(buf: Buf) -> dict:
+    def read_h266_nalu(buf: Buf, state={}) -> dict:
         buf = Buf(
             buf
             .read(buf.unit)
