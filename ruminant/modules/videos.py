@@ -18,6 +18,150 @@ def mp4_decode_language(lang_bytes):
 
 
 class FFMpreg(object):
+    H264_NAL_UNIT_TYPES = {
+        0x00: "Unspecified",
+        0x01: "Coded slice of a non-IDR picture",
+        0x02: "Coded slice data partition A",
+        0x03: "Coded slice data partition B",
+        0x04: "Coded slice data partition C",
+        0x05: "Coded slice of an IDR picture",
+        0x06: "Supplemental enhancement information",
+        0x07: "Sequence parameter set",
+        0x08: "Picture parameter set",
+        0x09: "Access unit delimiter",
+        0x0a: "End of sequence",
+        0x0b: "End of stream",
+        0x0c: "Filler data",
+        0x0d: "Sequence parameter set extension",
+        0x0e: "Prefix NAL unit",
+        0x0f: "Subset sequence parameter set",
+        0x10: "Reserved 16",
+        0x11: "Reserved 17",
+        0x12: "Reserved 18",
+        0x13: "Coded slice of an auxiliary coded picture without partitioning",
+        0x14: "Coded slice extension",
+        0x15: "Reserved 21",
+        0x16: "Reserved 22",
+        0x17: "Reserved 23",
+        0x18: "Unspecified 24",
+        0x19: "Unspecified 25",
+        0x1a: "Unspecified 26",
+        0x1b: "Unspecified 27",
+        0x1c: "Unspecified 28",
+        0x1d: "Unspecified 29",
+        0x1e: "Unspecified 30",
+        0x1f: "Unspecified 31",
+    }
+    H265_NAL_UNIT_TYPES = {
+        0x00: "TRAIL_N",
+        0x01: "TRAIL_R",
+        0x02: "TSA_N",
+        0x03: "TSA_R",
+        0x04: "STSA_N",
+        0x05: "STSA_R",
+        0x06: "RADL_N",
+        0x07: "RADL_R",
+        0x08: "RASL_N",
+        0x09: "RASL_R",
+        0x0a: "RSV_VCL_N10",
+        0x0b: "RSV_VCL_R11",
+        0x0c: "RSV_VCL_N12",
+        0x0d: "RSV_VCL_R13",
+        0x0e: "RSV_VCL_N14",
+        0x0f: "RSV_VCL_R15",
+        0x10: "BLA_W_LP",
+        0x11: "BLA_W_RADL",
+        0x12: "BLA_N_LP",
+        0x13: "IDR_W_RADL",
+        0x14: "IDR_N_LP",
+        0x15: "CRA_NUT",
+        0x16: "RSV_IRAP_VCL22",
+        0x17: "RSV_IRAP_VCL23",
+        0x18: "RSV_VCL24",
+        0x19: "RSV_VCL25",
+        0x1a: "RSV_VCL26",
+        0x1b: "RSV_VCL27",
+        0x1c: "RSV_VCL28",
+        0x1d: "RSV_VCL29",
+        0x1e: "RSV_VCL30",
+        0x1f: "RSV_VCL31",
+        0x20: "VPS_NUT",
+        0x21: "SPS_NUT",
+        0x22: "PPS_NUT",
+        0x23: "AUD_NUT",
+        0x24: "EOS_NUT",
+        0x25: "EOB_NUT",
+        0x26: "FD_NUT",
+        0x27: "PREFIX_SEI_NUT",
+        0x28: "SUFFIX_SEI_NUT",
+        0x29: "RSV_NVCL41",
+        0x2a: "RSV_NVCL42",
+        0x2b: "RSV_NVCL43",
+        0x2c: "RSV_NVCL44",
+        0x2d: "RSV_NVCL45",
+        0x2e: "RSV_NVCL46",
+        0x2f: "RSV_NVCL47",
+        0x30: "UNSPEC48",
+        0x31: "UNSPEC49",
+        0x32: "UNSPEC50",
+        0x33: "UNSPEC51",
+        0x34: "UNSPEC52",
+        0x35: "UNSPEC53",
+        0x36: "UNSPEC54",
+        0x37: "UNSPEC55",
+        0x38: "UNSPEC56",
+        0x39: "UNSPEC57",
+        0x3a: "UNSPEC58",
+        0x3b: "UNSPEC59",
+        0x3c: "UNSPEC60",
+        0x3d: "UNSPEC61",
+        0x3e: "UNSPEC62",
+        0x3f: "UNSPEC63",
+    }
+    H266_NAL_UNIT_TYPES = {
+        0x00: "TRAIL_NUT",
+        0x01: "STSA_NUT",
+        0x02: "RADL_NUT",
+        0x03: "RASL_NUT",
+        0x04: "RSV_VCL_4",
+        0x05: "RSV_VCL_5",
+        0x06: "RSV_VCL_6",
+        0x07: "IDR_W_RADL",
+        0x08: "IDR_N_LP",
+        0x09: "CRA_NUT",
+        0x0a: "GDR_NUT",
+        0x0b: "RSV_IRAP_11",
+        0x0c: "OPI_NUT",
+        0x0d: "DCI_NUT",
+        0x0e: "VPS_NUT",
+        0x0f: "SPS_NUT",
+        0x10: "PPS_NUT",
+        0x11: "PREFIX_APS_NUT",
+        0x12: "SUFFIX_APS_NUT",
+        0x13: "PH_NUT",
+        0x14: "AUD_NUT",
+        0x15: "EOS_NUT",
+        0x16: "EOB_NUT",
+        0x17: "PREFIX_SEI_NUT",
+        0x18: "SUFFIX_SEI_NUT",
+        0x19: "FD_NUT",
+        0x1a: "RSV_NVCL_26",
+        0x1b: "RSV_NVCL_27",
+        0x1c: "UNSPEC_28",
+        0x1d: "UNSPEC_29",
+        0x1e: "UNSPEC_30",
+        0x1f: "UNSPEC_31",
+    }
+    AV1_OBU_TYPES = {
+        0x01: "Sequence Header",
+        0x02: "Temporal Delimiter",
+        0x03: "Frame Header",
+        0x04: "Tile Group",
+        0x06: "Frame",
+        0x07: "Redundant Frame Header",
+        0x0b: "Metadata",
+    }
+
     @staticmethod
     def read_h264_nalu(buf: Buf, slim=False) -> dict:
         buf = Buf(
@@ -30,17 +174,14 @@ class FFMpreg(object):
         )
 
         nal = {}
+        nal["length"] = buf.available()
         nal["forbidden-zero-bit"] = buf.rb(1)
         nal["ref-idc"] = buf.rb(2)
         # ISO/IEC 14496-10:2022 page 81
         nal["unit-type"] = utils.unraw(
             buf.rb(5),
             1,
-            {
-                0x06: "Supplemental Enhancement Information",
-                0x07: "Sequence parameter set",
-                0x08: "Picture parameter set",
-            },
+            FFMpreg.H264_NAL_UNIT_TYPES,
             True,
         )
 
@@ -122,7 +263,7 @@ class FFMpreg(object):
 
                 buf.align()
                 nal["rest"] = buf.rh(buf.unit)
-            case "Supplemental Enhancement Information":
+            case "Supplemental enhancement information":
                 t = 0
                 while True:
                     b = buf.ru8()
@@ -166,15 +307,7 @@ class FFMpreg(object):
         obu["type"] = utils.unraw(
             buf.rb(4),
             1,
-            {
-                0x01: "Sequence Header",
-                0x02: "Temporal Delimiter",
-                0x03: "Frame Header",
-                0x04: "Tile Group",
-                0x06: "Frame",
-                0x07: "Redundant Frame Header",
-                0x0b: "Metadata",
-            },
+            FFMpreg.AV1_OBU_TYPES,
             True,
         )
         obu["extension-flag"] = buf.rb(1)
@@ -392,18 +525,19 @@ class FFMpreg(object):
         )
 
         nal = {}
+        nal["length"] = buf.available()
         nal["forbidden-zero-bit"] = buf.rb(1)
         nal["unit-type"] = utils.unraw(
             buf.rb(6),
             1,
-            {0x20: "VPS", 0x21: "SPS", 0x22: "PPS", 0x23: "AUD", 0x27: "Prefix SEI", 0x28: "Suffix SEI"},
+            FFMpreg.H265_NAL_UNIT_TYPES,
             True,
         )
         nal["nuh-layer-id"] = buf.rb(6)
         nal["nuh-temporal-id-plus-one"] = buf.rb(3)
 
         match nal["unit-type"]:
-            case "Prefix SEI" | "Suffix SEI":
+            case "PREFIX_SEI_NUT" | "SUFFIX_SEI_NUT":
                 nal["seis"] = []
 
                 while buf.available() > 1:
@@ -464,11 +598,37 @@ class FFMpreg(object):
                     buf.sapunit()
 
                     nal["seis"].append(sei)
-            case "AUD":
+            case "AUD_NUT":
                 nal["pic-type"] = utils.unraw(buf.rb(3), 1, {0x00: "I", 0x01: "P/I", 0x02: "B/P/I"}, True)
                 buf.align()
             case _:
                 nal["unknown"] = True
+
+        return nal
+
+    @staticmethod
+    def read_h266_nalu(buf: Buf) -> dict:
+        buf = Buf(
+            buf
+            .read(buf.unit)
+            .replace(b"\x00\x00\x03\x00", b"\x00\x00\x00")
+            .replace(b"\x00\x00\x03\x01", b"\x00\x00\x01")
+            .replace(b"\x00\x00\x03\x02", b"\x00\x00\x02")
+            .replace(b"\x00\x00\x03\x03", b"\x00\x00\x03")
+        )
+
+        nal = {}
+        nal["length"] = buf.available()
+        nal["forbidden-zero-bit"] = buf.rb(1)
+        nal["nuh-reserved-zero-bit"] = buf.rb(1)
+        nal["nuh-layer-id"] = buf.rb(6)
+        nal["unit-type"] = utils.unraw(buf.rb(5), 1, FFMpreg.H266_NAL_UNIT_TYPES, True)
+        nal["nuh-temporal-id-plus-one"] = buf.rb(3)
+
+        match nal["unit-type"]:
+            case "AUD_NUT":
+                nal["irap-or-gdr-flag"] = buf.rb(1)
+                nal["pic-type"] = utils.unraw(buf.rb(3), 1, {0x00: "I", 0x01: "P/I", 0x02: "B/P/I"}, True)
 
         return nal
 
@@ -968,13 +1128,7 @@ class IsoModule(module.RuminantModule):
                 array["nal-unit-type"] = utils.unraw(
                     self.buf.rb(6),
                     1,
-                    {
-                        0x20: "VPS",
-                        0x21: "SPS",
-                        0x22: "PPS",
-                        0x27: "Prefix SEI",
-                        0x28: "Suffix SEI",
-                    },
+                    FFMpreg.H265_NAL_UNIT_TYPES,
                     True,
                 )
                 array["nalu-count"] = self.buf.ru16()
@@ -1725,42 +1879,16 @@ class IsoModule(module.RuminantModule):
                 array = {}
                 array["completeness"] = self.buf.rb(1)
                 array["reserved"] = self.buf.rb(2)
-                array["type"] = utils.unraw(self.buf.rb(5), 1, {0x0f: "SPS_NUT", 0x10: "PPS_NUT"}, True)
+                array["type"] = utils.unraw(self.buf.rb(5), 1, FFMpreg.H265_NAL_UNIT_TYPES, True)
 
                 array["nalu-count"] = self.buf.ru16()
                 array["nalus"] = []
                 for i in range(0, array["nalu-count"]):
-                    nalu = {}
-                    nalu["length"] = self.buf.ru16()
+                    self.buf.pasunit(self.buf.ru16())
 
-                    self.buf.pasunit(nalu["length"])
-
-                    nalu["forbidden-zero-bit"] = self.buf.rb(1)
-                    nalu["nuh-reserved-zero-bit"] = self.buf.rb(1)
-                    nalu["nuh-layer-id"] = self.buf.rb(6)
-                    nalu["type"] = utils.unraw(self.buf.rb(5), 1, {0x0f: "SPS_NUT", 0x10: "PPS_NUT"}, True)
-                    nalu["nuh-temporal-id-plus-one"] = self.buf.rb(3)
-
-                    nalu["payload"] = {}
-                    match nalu["type"]:
-                        case "PPS_NUT":
-                            nalu["payload"] = {}
-                            nalu["payload"]["pps-pic-parameter-set-id"] = self.buf.rb(6)
-                            nalu["payload"]["pps-seq-parameter-set-id"] = self.buf.rb(4)
-                            nalu["payload"]["pps-mixed-nalu-types-in-pic-flag"] = self.buf.rb(1)
-                            nalu["payload"]["pps-pic-width-in-luma-samples"] = self.buf.rue()
-                            nalu["payload"]["pps-pic-height-in-luma-samples"] = self.buf.rue()
-                            nalu["payload"]["pps-conformance-window-flag"] = self.buf.rb(1)
-
-                            # TODO
-                            self.buf.align()
-                        case _:
-                            nalu["payload"] = self.buf.rh(self.buf.unit)
-                            nalu["unknown"] = True
+                    array["nalus"].append(FFMpreg.read_h266_nalu(self.buf))
 
                     self.buf.sapunit()
-
-                    array["nalus"].append(nalu)
 
                 atom["data"]["arrays"].append(array)
         elif typ == "ccst":
@@ -2100,6 +2228,28 @@ class IsoModule(module.RuminantModule):
                     self.buf.pasunit(nalu["length"])
 
                     nalu["payload"] = FFMpreg.read_h265_nalu(self.buf)
+
+                    self.buf.sapunit()
+
+                    data["first-sample-nals"].append(nalu)
+
+                self.buf.sapunit()
+            case "vvc1":
+                self.buf.seek(sample_to_offset[0])
+                self.buf.pasunit(sample_sizes[0])
+
+                hvcC = self.get_all(codec["data"]["atoms"], "vvcC")[0]
+                nal_length_size = (hvcC["data"]["length-size-minus-one"] & 0x03) + 1
+                data["nal-length-size"] = nal_length_size
+
+                data["first-sample-nals"] = []
+                while self.buf.unit > 0:
+                    nalu = {}
+                    nalu["length"] = int.from_bytes(self.buf.read(nal_length_size), "big")
+
+                    self.buf.pasunit(nalu["length"])
+
+                    nalu["payload"] = FFMpreg.read_h266_nalu(self.buf)
 
                     self.buf.sapunit()
 
