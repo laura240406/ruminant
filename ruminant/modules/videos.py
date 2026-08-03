@@ -153,13 +153,22 @@ class FFMpreg(object):
         0x1f: "UNSPEC_31",
     }
     AV1_OBU_TYPES = {
-        0x01: "Sequence Header",
-        0x02: "Temporal Delimiter",
-        0x03: "Frame Header",
-        0x04: "Tile Group",
-        0x06: "Frame",
-        0x07: "Redundant Frame Header",
-        0x0b: "Metadata",
+        0x00: "RESERVED",
+        0x01: "SEQUENCE_HEADER",
+        0x02: "TEMPORAL_DELIMITER",
+        0x03: "FRAME_HEADER",
+        0x04: "TILE_GROUP",
+        0x05: "METADATA",
+        0x06: "FRAME",
+        0x07: "REDUNDANT_FRAME_HEADER",
+        0x08: "TILE_LIST",
+        0x09: "RESERVED",
+        0x0a: "RESERVED",
+        0x0b: "RESERVED",
+        0x0c: "RESERVED",
+        0x0d: "RESERVED",
+        0x0e: "RESERVED",
+        0x0f: "PADDING",
     }
 
     @staticmethod
@@ -329,7 +338,7 @@ class FFMpreg(object):
         buf.pasunit(length)
 
         match obu["type"]:
-            case "Sequence Header":
+            case "SEQUENCE_HEADER":
                 # https://aomediacodec.github.io/av1-spec/#sequence-header-obu-syntax
                 obu["seq-profile"] = buf.rb(3)
                 obu["still-picture"] = buf.rb(1)
@@ -504,7 +513,7 @@ class FFMpreg(object):
                 obu["film-grain-params-present"] = buf.rb(1)
 
                 buf.align()
-            case "Temporal Delimiter":
+            case "TEMPORAL_DELIMITER":
                 pass
             case _:
                 obu["unknown"] = True
