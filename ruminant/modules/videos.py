@@ -248,6 +248,7 @@ class FFMpreg(object):
                     135,
                     138,
                     139,
+                    144,
                     244,
                 ):
                     nal["chroma-format-idc"] = buf.rue()
