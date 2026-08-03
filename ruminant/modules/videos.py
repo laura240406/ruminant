@@ -2120,9 +2120,19 @@ class IsoModule(module.RuminantModule):
         return data
 
     def process_heif_picture(self, codec, picture):
-        picture["obus"] = []
-        while picture["buf"].available():
-            picture["obus"].append(FFMpreg.read_av1_obu(picture["buf"]))
+        match codec:
+            case "av1C":
+                picture["obus"] = []
+                while picture["buf"].available():
+                    picture["obus"].append(FFMpreg.read_av1_obu(picture["buf"]))
+            case "hvcC":
+                picture["nals"] = []
+                while picture["buf"].available():
+                    picture["nals"].append(FFMpreg.read_h265_nalu(picture["buf"]))
+            case "avcC":
+                picture["nals"] = []
+                while picture["buf"].available():
+                    picture["nals"].append(FFMpreg.read_h264_nalu(picture["buf"]))
 
         del picture["buf"]
 
