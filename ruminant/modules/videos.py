@@ -409,10 +409,21 @@ class FFMpreg(object):
                     nal["transform-8x8-mode-flag"] = buf.rb(1)
                     nal["pic-scaling-matrix-present-flag"] = buf.rb(1)
 
-                    # TODO
+                    if nal["pic-scaling-matrix-present-flag"]:
+                        nal["pic-scaling-matrices"] = []
+
+                        for i in range(0, 6 + (6 if state.get("chroma-format-idc") == 3 else 2)):
+                            matrix = []
+                            if buf.rb(1):
+                                matrix = []
+                                if buf.rb(1):
+                                    matrix = FFMpreg.read_h264_scaling_list(buf, 16 if i < 6 else 64)
+
+                            nal["pic-scaling-matrices"].append(matrix)
+
+                        nal["second-chroma-qp-index-offset"] = buf.rse()
 
                 buf.align()
-                nal["rest"] = buf.rh(buf.unit)
             case "Supplemental enhancement information":
                 t = 0
                 while True:
