@@ -2905,13 +2905,7 @@ class MatroskaModule(module.RuminantModule):
                             array["nal-unit-type"] = utils.unraw(
                                 self.buf.rb(6),
                                 1,
-                                {
-                                    0x20: "VPS",
-                                    0x21: "SPS",
-                                    0x22: "PPS",
-                                    0x27: "Prefix SEI",
-                                    0x28: "Suffix SEI",
-                                },
+                                FFMpreg.H265_NAL_UNIT_TYPES,
                                 True,
                             )
                             array["nalu-count"] = self.buf.ru16()
@@ -3142,6 +3136,78 @@ class MatroskaModule(module.RuminantModule):
                     sample["chroma-qmat"] = self.buf.rh(64)
 
                     stream["first-sample"] = sample
+                case "V_MPEGI/ISO/VVC":
+                    with self.buf:
+                        self.buf.seek(codec_privates[stream["id"]]["data-offset"])
+                        self.buf.pasunit(codec_privates[stream["id"]]["length"])
+
+                        parsed["reserved1"] = self.buf.rb(5)
+                        parsed["length-size-minus-one"] = self.buf.rb(2)
+                        parsed["ptl-present"] = self.buf.rb(1)
+
+                        if parsed["ptl-present"]:
+                            parsed["ols-idx"] = self.buf.rb(9)
+                            parsed["sublayers-count"] = self.buf.rb(3)
+                            parsed["constant-frame-rate"] = self.buf.rb(2)
+                            parsed["chroma-format-idc"] = self.buf.rb(2)
+                            parsed["bit-depth-minus-eight"] = self.buf.rb(3)
+                            parsed["reserved2"] = self.buf.rb(5)
+                            parsed["general-profile-idc"] = self.buf.rb(7)
+                            parsed["general-tier-flag"] = self.buf.rb(1)
+                            parsed["general-level-idc"] = self.buf.rb(8)
+                            parsed["ptl-frame-only-constraint-flag"] = self.buf.rb(1)
+                            parsed["ptl-multi-layer-enabled-flag"] = self.buf.rb(1)
+                            parsed["general-constraint-info-bytes"] = self.buf.rb(6)
+                            parsed["general-constraint-info"] = self.buf.rh(parsed["general-constraint-info-bytes"])
+
+                            if parsed["sublayers-count"] > 1:
+                                temp = self.buf.rb(parsed["sublayers-count"] - 1)
+                                self.buf.align()
+                                parsed["ptl-sublayer-level-present-flag"] = temp
+                                parsed["sublayer-level-idc"] = self.buf.rh(temp.bit_count())
+
+                            parsed["ptl-sub-profile-count"] = self.buf.ru8()
+                            parsed["ptl-sub-profiles"] = self.buf.rh(parsed["ptl-sub-profile-count"] * 4)
+
+                        parsed["max-picture-width"] = self.buf.ru16()
+                        parsed["max-picture-height"] = self.buf.ru16()
+                        parsed["avg-frame-rate"] = self.buf.ru16() / 256
+
+                        parsed["array-count"] = self.buf.ru8()
+                        parsed["arrays"] = []
+                        for i in range(0, parsed["array-count"]):
+                            array = {}
+                            array["completeness"] = self.buf.rb(1)
+                            array["reserved"] = self.buf.rb(2)
+                            array["type"] = utils.unraw(self.buf.rb(5), 1, FFMpreg.H265_NAL_UNIT_TYPES, True)
+
+                            array["nalu-count"] = self.buf.ru16()
+                            array["nalus"] = []
+                            for i in range(0, array["nalu-count"]):
+                                self.buf.pasunit(self.buf.ru16())
+
+                                array["nalus"].append(FFMpreg.read_h266_nalu(self.buf))
+
+                                self.buf.sapunit()
+
+                            parsed["arrays"].append(array)
+
+                        codec_privates[stream["id"]]["parsed"] = parsed
+                        self.buf.sapunit()
+
+                    nal_length_size = parsed["length-size-minus-one"] + 1
+                    stream["first-sample-nals"] = []
+                    while self.buf.hasunit():
+                        nalu = {}
+                        nalu["length"] = int.from_bytes(self.buf.read(nal_length_size), "big")
+
+                        self.buf.pasunit(nalu["length"])
+
+                        nalu["payload"] = FFMpreg.read_h266_nalu(self.buf)
+
+                        self.buf.sapunit()
+
+                        stream["first-sample-nals"].append(nalu)
                 case "A_VORBIS" | "V_THEORA":
                     with self.buf:
                         self.buf.seek(codec_privates[stream["id"]]["data-offset"])
