@@ -2,7 +2,7 @@ import uuid
 import struct
 import datetime
 import math
-from .. import module, utils, ruminant_types
+from .. import module, utils, ruminant_types, secrets
 from ..buf import Buf
 from . import chew
 
@@ -2570,27 +2570,31 @@ class IsoModule(module.RuminantModule):
 
         match codec["type"]:
             case "avc1":
-                self.buf.seek(sample_to_offset[0])
-                self.buf.pasunit(sample_sizes[0])
-
                 avcC = self.get_all(codec["data"]["atoms"], "avcC")[0]
                 nal_length_size = (avcC["data"]["length-size-minus-one"] & 0x03) + 1
                 data["nal-length-size"] = nal_length_size
 
-                data["first-sample-nals"] = []
-                while self.buf.unit > 0:
-                    nalu = {}
-                    nalu["length"] = int.from_bytes(self.buf.read(nal_length_size), "big")
+                ranges = utils.expand_ranges(secrets.get_parameter("0", data, "ranges"), 0, len(sample_to_offset) - 1)
+                data["samples"] = {}
 
-                    self.buf.pasunit(nalu["length"])
+                for index in ranges:
+                    self.buf.seek(sample_to_offset[index])
+                    self.buf.pasunit(sample_sizes[index])
 
-                    nalu["payload"] = FFMpreg.read_h264_nalu(self.buf, slim=True)
+                    data["samples"][index] = []
+                    while self.buf.unit > 0:
+                        nalu = {}
+                        nalu["length"] = int.from_bytes(self.buf.read(nal_length_size), "big")
+
+                        self.buf.pasunit(nalu["length"])
+
+                        nalu["payload"] = FFMpreg.read_h264_nalu(self.buf, slim=True)
+
+                        self.buf.sapunit()
+
+                        data["samples"][index].append(nalu)
 
                     self.buf.sapunit()
-
-                    data["first-sample-nals"].append(nalu)
-
-                self.buf.sapunit()
             case "av01":
                 if self.get_all(atoms, "ftyp")[0]["data"]["major-brand"] == "avis":
                     data["pictures"] = []
@@ -2605,85 +2609,113 @@ class IsoModule(module.RuminantModule):
                         data["pictures"].append(picture)
                         self.buf.sapunit()
                 else:
-                    self.buf.seek(sample_to_offset[0])
-                    self.buf.pasunit(sample_sizes[0])
+                    ranges = utils.expand_ranges(secrets.get_parameter("0", data, "ranges"), 0, len(sample_to_offset) - 1)
+                    data["samples"] = {}
 
-                    data["obus"] = []
-                    while self.buf.unit > 0:
-                        data["obus"].append(FFMpreg.read_av1_obu(self.buf))
+                    for index in ranges:
+                        self.buf.seek(sample_to_offset[index])
+                        self.buf.pasunit(sample_sizes[index])
 
-                    self.buf.sapunit()
+                        obus = []
+                        while self.buf.unit > 0:
+                            obus.append(FFMpreg.read_av1_obu(self.buf))
+
+                        data["samples"][index] = obus
+
+                        self.buf.sapunit()
             case "tx3g":
-                data["text"] = []
-                for i in range(0, min(len(sample_to_offset), 16)):
-                    self.buf.seek(sample_to_offset[i])
-                    with self.buf.sub(sample_sizes[i]):
-                        data["text"].append(self.buf.rs(self.buf.ru16()))
-            case "hev1" | "hvc1":
-                self.buf.seek(sample_to_offset[0])
-                self.buf.pasunit(sample_sizes[0])
+                ranges = utils.expand_ranges(secrets.get_parameter("0", data, "ranges"), 0, len(sample_to_offset) - 1)
+                data["samples"] = {}
 
+                for index in ranges:
+                    self.buf.seek(sample_to_offset[index])
+                    with self.buf.sub(sample_sizes[index]):
+                        data["samples"][index] = self.buf.rs(self.buf.ru16())
+            case "hev1" | "hvc1":
                 hvcC = self.get_all(codec["data"]["atoms"], "hvcC")[0]
                 nal_length_size = (hvcC["data"]["length-size-minus-one"] & 0x03) + 1
                 data["nal-length-size"] = nal_length_size
 
-                data["first-sample-nals"] = []
-                while self.buf.unit > 0:
-                    nalu = {}
-                    nalu["length"] = int.from_bytes(self.buf.read(nal_length_size), "big")
+                ranges = utils.expand_ranges(secrets.get_parameter("0", data, "ranges"), 0, len(sample_to_offset) - 1)
+                data["samples"] = {}
 
-                    self.buf.pasunit(nalu["length"])
+                for index in ranges:
+                    self.buf.seek(sample_to_offset[index])
+                    self.buf.pasunit(sample_sizes[index])
 
-                    nalu["payload"] = FFMpreg.read_h265_nalu(self.buf)
+                    data["samples"][index] = []
+                    while self.buf.unit > 0:
+                        nalu = {}
+                        nalu["length"] = int.from_bytes(self.buf.read(nal_length_size), "big")
+
+                        self.buf.pasunit(nalu["length"])
+
+                        nalu["payload"] = FFMpreg.read_h265_nalu(self.buf)
+
+                        self.buf.sapunit()
+
+                        data["samples"][index].append(nalu)
 
                     self.buf.sapunit()
-
-                    data["first-sample-nals"].append(nalu)
-
-                self.buf.sapunit()
             case "vvc1":
-                self.buf.seek(sample_to_offset[0])
-                self.buf.pasunit(sample_sizes[0])
-
-                hvcC = self.get_all(codec["data"]["atoms"], "vvcC")[0]
-                nal_length_size = (hvcC["data"]["length-size-minus-one"] & 0x03) + 1
+                vvcC = self.get_all(codec["data"]["atoms"], "vvcC")[0]
+                nal_length_size = (vvcC["data"]["length-size-minus-one"] & 0x03) + 1
                 data["nal-length-size"] = nal_length_size
 
-                data["first-sample-nals"] = []
-                while self.buf.unit > 0:
-                    nalu = {}
-                    nalu["length"] = int.from_bytes(self.buf.read(nal_length_size), "big")
+                ranges = utils.expand_ranges(secrets.get_parameter("0", data, "ranges"), 0, len(sample_to_offset) - 1)
+                data["samples"] = {}
 
-                    self.buf.pasunit(nalu["length"])
+                for index in ranges:
+                    self.buf.seek(sample_to_offset[index])
+                    self.buf.pasunit(sample_sizes[index])
 
-                    nalu["payload"] = FFMpreg.read_h266_nalu(self.buf)
+                    data["samples"][index] = []
+                    while self.buf.unit > 0:
+                        nalu = {}
+                        nalu["length"] = int.from_bytes(self.buf.read(nal_length_size), "big")
+
+                        self.buf.pasunit(nalu["length"])
+
+                        nalu["payload"] = FFMpreg.read_h266_nalu(self.buf)
+
+                        self.buf.sapunit()
+
+                        data["samples"][index].append(nalu)
 
                     self.buf.sapunit()
-
-                    data["first-sample-nals"].append(nalu)
-
-                self.buf.sapunit()
             case "mett":
-                self.buf.seek(sample_to_offset[0])
-                self.buf.pasunit(sample_sizes[0])
+                ranges = utils.expand_ranges(secrets.get_parameter("0", data, "ranges"), 0, len(sample_to_offset) - 1)
+                data["samples"] = {}
 
-                self.buf.skip(3)
-                data["first-sample"] = utils.read_protobuf(
-                    self.buf,
-                    self.buf.unit,
-                    True,
-                    {0: {14: {}}, 10: {}, 13: "float", 14: "float", 15: "float", 16: "float", 18: {}},
-                )
+                for index in ranges:
+                    self.buf.seek(sample_to_offset[index])
+                    self.buf.pasunit(sample_sizes[index])
 
-                self.buf.sapunit()
+                    self.buf.skip(3)
+                    data["samples"][index] = utils.read_protobuf(
+                        self.buf,
+                        self.buf.unit,
+                        True,
+                        {0: {14: {}}, 10: {}, 13: "float", 14: "float", 15: "float", 16: "float", 18: {}},
+                    )
+
+                    self.buf.sapunit()
             case "mp4a" | "mp4v" | "drac":
-                self.buf.seek(sample_to_offset[0])
-                with self.buf.sub(sample_sizes[0]):
-                    data["first-sample"] = chew(self.buf)
+                ranges = utils.expand_ranges(secrets.get_parameter("0", data, "ranges"), 0, len(sample_to_offset) - 1)
+                data["samples"] = {}
+
+                for index in ranges:
+                    self.buf.seek(sample_to_offset[index])
+                    with self.buf.sub(sample_sizes[index]):
+                        data["samples"][index] = chew(self.buf)
             case _:
-                self.buf.seek(sample_to_offset[0])
-                with self.buf.sub(sample_sizes[0]):
-                    data["first-sample"] = chew(self.buf, blob_mode=True)
+                ranges = utils.expand_ranges(secrets.get_parameter("0", data, "ranges"), 0, len(sample_to_offset) - 1)
+                data["samples"] = {}
+
+                for index in ranges:
+                    self.buf.seek(sample_to_offset[index])
+                    with self.buf.sub(sample_sizes[index]):
+                        data["samples"][index] = chew(self.buf, blob_mode=True)
 
                 data["unknown"] = True
 
@@ -3211,8 +3243,7 @@ class MatroskaModule(module.RuminantModule):
             self.buf.sapunit()
 
         for stream in streams:
-            self.buf.seek(sample_offsets[stream["id"]][0])
-            self.buf.pasunit(sample_sizes[stream["id"]][0])
+            ranges: list[int] = utils.expand_ranges(secrets.get_parameter("0", stream, "ranges"), 0, len(sample_offsets) - 1)
 
             parsed: dict = {}
             nalu: dict = {}
@@ -3266,18 +3297,26 @@ class MatroskaModule(module.RuminantModule):
                         self.buf.sapunit()
 
                     nal_length_size = parsed["length-size-minus-one"] + 1
-                    stream["first-sample-nals"] = []
-                    while self.buf.hasunit():
-                        nalu = {}
-                        nalu["length"] = int.from_bytes(self.buf.read(nal_length_size), "big")
+                    stream["samples"] = {}
 
-                        self.buf.pasunit(nalu["length"])
+                    for index in ranges:
+                        self.buf.seek(sample_offsets[stream["id"]][index])
+                        self.buf.pasunit(sample_sizes[stream["id"]][index])
 
-                        nalu["payload"] = FFMpreg.read_h264_nalu(self.buf, slim=True)
+                        stream["samples"][index] = []
+                        while self.buf.hasunit():
+                            nalu = {}
+                            nalu["length"] = int.from_bytes(self.buf.read(nal_length_size), "big")
+
+                            self.buf.pasunit(nalu["length"])
+
+                            nalu["payload"] = FFMpreg.read_h264_nalu(self.buf, slim=True)
+
+                            self.buf.sapunit()
+
+                            stream["samples"][index].append(nalu)
 
                         self.buf.sapunit()
-
-                        stream["first-sample-nals"].append(nalu)
                 case "V_MPEGH/ISO/HEVC":
                     with self.buf:
                         self.buf.seek(codec_privates[stream["id"]]["data-offset"])
@@ -3339,18 +3378,26 @@ class MatroskaModule(module.RuminantModule):
                         self.buf.sapunit()
 
                     nal_length_size = parsed["length-size-minus-one"] + 1
-                    stream["first-sample-nals"] = []
-                    while self.buf.hasunit():
-                        nalu = {}
-                        nalu["length"] = int.from_bytes(self.buf.read(nal_length_size), "big")
+                    stream["samples"] = {}
 
-                        self.buf.pasunit(nalu["length"])
+                    for index in ranges:
+                        self.buf.seek(sample_offsets[stream["id"]][index])
+                        self.buf.pasunit(sample_sizes[stream["id"]][index])
 
-                        nalu["payload"] = FFMpreg.read_h265_nalu(self.buf)
+                        stream["samples"][index] = []
+                        while self.buf.hasunit():
+                            nalu = {}
+                            nalu["length"] = int.from_bytes(self.buf.read(nal_length_size), "big")
+
+                            self.buf.pasunit(nalu["length"])
+
+                            nalu["payload"] = FFMpreg.read_h265_nalu(self.buf)
+
+                            self.buf.sapunit()
+
+                            stream["samples"][index].append(nalu)
 
                         self.buf.sapunit()
-
-                        stream["first-sample-nals"].append(nalu)
                 case "A_FLAC":
                     with self.buf:
                         self.buf.seek(codec_privates[stream["id"]]["data-offset"])
@@ -3361,8 +3408,15 @@ class MatroskaModule(module.RuminantModule):
 
                         self.buf.sapunit()
 
-                    with self.buf.subunit():
-                        stream["first-sample"] = chew(self.buf, blob_mode=True)
+                    stream["samples"] = {}
+
+                    for index in ranges:
+                        self.buf.seek(sample_offsets[stream["id"]][index])
+                        self.buf.pasunit(sample_sizes[stream["id"]][index])
+
+                        stream["samples"][index] = chew(self.buf, blob_mode=True)
+
+                        self.buf.sapunit()
                 case "V_AV1":
                     with self.buf:
                         self.buf.seek(codec_privates[stream["id"]]["data-offset"])
@@ -3393,12 +3447,28 @@ class MatroskaModule(module.RuminantModule):
                         codec_privates[stream["id"]]["parsed"] = parsed
                         self.buf.sapunit()
 
-                    stream["first-sample-obus"] = []
-                    while self.buf.hasunit():
-                        stream["first-sample-obus"].append(FFMpreg.read_av1_obu(self.buf))
+                    stream["samples"] = {}
+
+                    for index in ranges:
+                        self.buf.seek(sample_offsets[stream["id"]][index])
+                        self.buf.pasunit(sample_sizes[stream["id"]][index])
+
+                        stream["samples"][index] = []
+                        while self.buf.hasunit():
+                            stream["samples"][index].append(FFMpreg.read_av1_obu(self.buf))
+
+                        self.buf.sapunit()
                 case "V_DIRAC":
-                    with self.buf.subunit():
-                        stream["first-sample"] = chew(self.buf)
+                    stream["samples"] = {}
+
+                    for index in ranges:
+                        self.buf.seek(sample_offsets[stream["id"]][index])
+                        self.buf.pasunit(sample_sizes[stream["id"]][index])
+
+                        with self.buf.subunit():
+                            stream["samples"][index] = chew(self.buf)
+
+                        self.buf.sapunit()
                 case "A_OPUS":
                     with self.buf:
                         self.buf.seek(codec_privates[stream["id"]]["data-offset"])
@@ -3422,8 +3492,16 @@ class MatroskaModule(module.RuminantModule):
                         codec_privates[stream["id"]]["parsed"] = parsed
                         self.buf.sapunit()
 
-                    with self.buf.subunit():
-                        stream["first-sample"] = chew(self.buf, blob_mode=True)
+                    stream["samples"] = {}
+
+                    for index in ranges:
+                        self.buf.seek(sample_offsets[stream["id"]][index])
+                        self.buf.pasunit(sample_sizes[stream["id"]][index])
+
+                        with self.buf.subunit():
+                            stream["samples"][index] = chew(self.buf, blob_mode=True)
+
+                        self.buf.sapunit()
                 case "V_PRORES":
                     with self.buf:
                         self.buf.seek(codec_privates[stream["id"]]["data-offset"])
@@ -3434,119 +3512,127 @@ class MatroskaModule(module.RuminantModule):
                         codec_privates[stream["id"]]["parsed"] = parsed
                         self.buf.sapunit()
 
-                    sample = {}
-                    sample["header-length"] = self.buf.ru16()
-                    sample["version"] = self.buf.ru8()
-                    sample["reserved1"] = self.buf.ru8()
-                    sample["creator"] = self.buf.rs(4)
-                    sample["width"] = self.buf.ru16()
-                    sample["height"] = self.buf.ru16()
-                    sample["chroma-format"] = utils.unraw(
-                        self.buf.ru8(),
-                        1,
-                        {
-                            0x80: "4:2:2 Progressive",
-                            0x84: "4:2:2 Interlaced (Top Field First)",
-                            0x88: "4:2:2 Interlaced (Bottom Field First)",
-                            0xc0: "4:4:4 Progressive",
-                            0xc4: "4:4:4 Interlaced (Top Field First)",
-                            0xc8: "4:4:4 Interlaced (Bottom Field First)",
-                        },
-                        True,
-                    )
-                    sample["aspect-ratio"] = utils.unraw(
-                        self.buf.ru8(),
-                        1,
-                        {
-                            0x00: "Unspecified",
-                            0x01: "1:1 (Square Pixels)",
-                            0x02: "4:3",
-                            0x03: "16:9",
-                        },
-                        True,
-                    )
-                    sample["color-primaries"] = utils.unraw(
-                        self.buf.ru8(),
-                        1,
-                        {
-                            0x00: "Reserved",
-                            0x01: "ITU-R BT.709",
-                            0x02: "Unspecified",
-                            0x04: "ITU-R BT.470 System M",
-                            0x05: "ITU-R BT.470 System B, G",
-                            0x06: "SMPTE 170M / ITU-R BT.601",
-                            0x07: "SMPTE 240M",
-                            0x08: "Generic Film (Illuminant C)",
-                            0x09: "ITU-R BT.2020 / BT.2100",
-                            0x0a: "SMPTE ST 428-1 (CIE 1931 XYZ)",
-                            0x0b: "DCI-P3 (SMPTE RP 431-2)",
-                            0x0c: "P3-D65 (SMPTE EG 432-1)",
-                            0x16: "EBU Tech. 3213-E",
-                        },
-                        True,
-                    )
-                    sample["transfer-function"] = utils.unraw(
-                        self.buf.ru8(),
-                        1,
-                        {
-                            0x00: "Reserved",
-                            0x01: "ITU-R BT.709",
-                            0x02: "Unspecified",
-                            0x04: "Gamma 2.2 Curve",
-                            0x05: "Gamma 2.8 Curve",
-                            0x06: "SMPTE 170M / ITU-R BT.601",
-                            0x07: "SMPTE 240M",
-                            0x08: "Linear",
-                            0x09: "Logarithmic (100:1 range)",
-                            0x0a: "Logarithmic (316.22777:1 range)",
-                            0x0b: "IEC 61966-2-4",
-                            0x0c: "ITU-R BT.1361 Extended Gamut",
-                            0x0d: "IEC 61966-2-1 (sRGB)",
-                            0x0e: "ITU-R BT.2020 (10-bit)",
-                            0x0f: "ITU-R BT.2020 (12-bit)",
-                            0x10: "SMPTE ST 2084 (PQ / HDR10)",
-                            0x11: "SMPTE ST 428-1",
-                            0x12: "ARIB STD-B67 (HLG)",
-                        },
-                        True,
-                    )
-                    sample["matrix-coefficients"] = utils.unraw(
-                        self.buf.ru8(),
-                        1,
-                        {
-                            0x00: "Identity / GBR",
-                            0x01: "ITU-R BT.709",
-                            0x02: "Unspecified",
-                            0x04: "FCC Title 47 CFR 73.682",
-                            0x05: "ITU-R BT.470 System B, G / BT.601 PAL",
-                            0x06: "SMPTE 170M / ITU-R BT.601 NTSC",
-                            0x07: "SMPTE 240M",
-                            0x08: "YCgCo",
-                            0x09: "ITU-R BT.2020 Non-constant Luminance",
-                            0x0a: "ITU-R BT.2020 Constant Luminance",
-                            0x0b: "SMPTE ST 2085",
-                            0x0c: "Chromaticity-derived Non-constant Luminance",
-                            0x0d: "Chromaticity-derived Constant Luminance",
-                            0x0e: "ICtCp",
-                        },
-                        True,
-                    )
-                    sample["alpha-channel"] = utils.unraw(
-                        self.buf.ru8(),
-                        1,
-                        {
-                            0x00: "None",
-                            0x01: "8-bit",
-                            0x02: "16-bit",
-                        },
-                        True,
-                    )
-                    sample["reserved2"] = self.buf.ru8()
-                    sample["quantization-flags"] = self.buf.ru8()
-                    sample["luma-qmat"] = self.buf.rh(64)
-                    sample["chroma-qmat"] = self.buf.rh(64)
+                    stream["samples"] = {}
 
-                    stream["first-sample"] = sample
+                    for index in ranges:
+                        self.buf.seek(sample_offsets[stream["id"]][index])
+                        self.buf.pasunit(sample_sizes[stream["id"]][index])
+
+                        sample = {}
+                        sample["header-length"] = self.buf.ru16()
+                        sample["version"] = self.buf.ru8()
+                        sample["reserved1"] = self.buf.ru8()
+                        sample["creator"] = self.buf.rs(4)
+                        sample["width"] = self.buf.ru16()
+                        sample["height"] = self.buf.ru16()
+                        sample["chroma-format"] = utils.unraw(
+                            self.buf.ru8(),
+                            1,
+                            {
+                                0x80: "4:2:2 Progressive",
+                                0x84: "4:2:2 Interlaced (Top Field First)",
+                                0x88: "4:2:2 Interlaced (Bottom Field First)",
+                                0xc0: "4:4:4 Progressive",
+                                0xc4: "4:4:4 Interlaced (Top Field First)",
+                                0xc8: "4:4:4 Interlaced (Bottom Field First)",
+                            },
+                            True,
+                        )
+                        sample["aspect-ratio"] = utils.unraw(
+                            self.buf.ru8(),
+                            1,
+                            {
+                                0x00: "Unspecified",
+                                0x01: "1:1 (Square Pixels)",
+                                0x02: "4:3",
+                                0x03: "16:9",
+                            },
+                            True,
+                        )
+                        sample["color-primaries"] = utils.unraw(
+                            self.buf.ru8(),
+                            1,
+                            {
+                                0x00: "Reserved",
+                                0x01: "ITU-R BT.709",
+                                0x02: "Unspecified",
+                                0x04: "ITU-R BT.470 System M",
+                                0x05: "ITU-R BT.470 System B, G",
+                                0x06: "SMPTE 170M / ITU-R BT.601",
+                                0x07: "SMPTE 240M",
+                                0x08: "Generic Film (Illuminant C)",
+                                0x09: "ITU-R BT.2020 / BT.2100",
+                                0x0a: "SMPTE ST 428-1 (CIE 1931 XYZ)",
+                                0x0b: "DCI-P3 (SMPTE RP 431-2)",
+                                0x0c: "P3-D65 (SMPTE EG 432-1)",
+                                0x16: "EBU Tech. 3213-E",
+                            },
+                            True,
+                        )
+                        sample["transfer-function"] = utils.unraw(
+                            self.buf.ru8(),
+                            1,
+                            {
+                                0x00: "Reserved",
+                                0x01: "ITU-R BT.709",
+                                0x02: "Unspecified",
+                                0x04: "Gamma 2.2 Curve",
+                                0x05: "Gamma 2.8 Curve",
+                                0x06: "SMPTE 170M / ITU-R BT.601",
+                                0x07: "SMPTE 240M",
+                                0x08: "Linear",
+                                0x09: "Logarithmic (100:1 range)",
+                                0x0a: "Logarithmic (316.22777:1 range)",
+                                0x0b: "IEC 61966-2-4",
+                                0x0c: "ITU-R BT.1361 Extended Gamut",
+                                0x0d: "IEC 61966-2-1 (sRGB)",
+                                0x0e: "ITU-R BT.2020 (10-bit)",
+                                0x0f: "ITU-R BT.2020 (12-bit)",
+                                0x10: "SMPTE ST 2084 (PQ / HDR10)",
+                                0x11: "SMPTE ST 428-1",
+                                0x12: "ARIB STD-B67 (HLG)",
+                            },
+                            True,
+                        )
+                        sample["matrix-coefficients"] = utils.unraw(
+                            self.buf.ru8(),
+                            1,
+                            {
+                                0x00: "Identity / GBR",
+                                0x01: "ITU-R BT.709",
+                                0x02: "Unspecified",
+                                0x04: "FCC Title 47 CFR 73.682",
+                                0x05: "ITU-R BT.470 System B, G / BT.601 PAL",
+                                0x06: "SMPTE 170M / ITU-R BT.601 NTSC",
+                                0x07: "SMPTE 240M",
+                                0x08: "YCgCo",
+                                0x09: "ITU-R BT.2020 Non-constant Luminance",
+                                0x0a: "ITU-R BT.2020 Constant Luminance",
+                                0x0b: "SMPTE ST 2085",
+                                0x0c: "Chromaticity-derived Non-constant Luminance",
+                                0x0d: "Chromaticity-derived Constant Luminance",
+                                0x0e: "ICtCp",
+                            },
+                            True,
+                        )
+                        sample["alpha-channel"] = utils.unraw(
+                            self.buf.ru8(),
+                            1,
+                            {
+                                0x00: "None",
+                                0x01: "8-bit",
+                                0x02: "16-bit",
+                            },
+                            True,
+                        )
+                        sample["reserved2"] = self.buf.ru8()
+                        sample["quantization-flags"] = self.buf.ru8()
+                        sample["luma-qmat"] = self.buf.rh(64)
+                        sample["chroma-qmat"] = self.buf.rh(64)
+
+                        stream["samples"][index] = sample
+
+                        self.buf.sapunit()
                 case "V_MPEGI/ISO/VVC":
                     with self.buf:
                         self.buf.seek(codec_privates[stream["id"]]["data-offset"])
@@ -3607,18 +3693,26 @@ class MatroskaModule(module.RuminantModule):
                         self.buf.sapunit()
 
                     nal_length_size = parsed["length-size-minus-one"] + 1
-                    stream["first-sample-nals"] = []
-                    while self.buf.hasunit():
-                        nalu = {}
-                        nalu["length"] = int.from_bytes(self.buf.read(nal_length_size), "big")
+                    stream["samples"] = {}
 
-                        self.buf.pasunit(nalu["length"])
+                    for index in ranges:
+                        self.buf.seek(sample_offsets[stream["id"]][index])
+                        self.buf.pasunit(sample_sizes[stream["id"]][index])
 
-                        nalu["payload"] = FFMpreg.read_h266_nalu(self.buf)
+                        stream["samples"][index] = []
+                        while self.buf.hasunit():
+                            nalu = {}
+                            nalu["length"] = int.from_bytes(self.buf.read(nal_length_size), "big")
+
+                            self.buf.pasunit(nalu["length"])
+
+                            nalu["payload"] = FFMpreg.read_h266_nalu(self.buf)
+
+                            self.buf.sapunit()
+
+                            stream["samples"][index].append(nalu)
 
                         self.buf.sapunit()
-
-                        stream["first-sample-nals"].append(nalu)
                 case "A_VORBIS" | "V_THEORA":
                     with self.buf:
                         self.buf.seek(codec_privates[stream["id"]]["data-offset"])
@@ -3712,8 +3806,16 @@ class MatroskaModule(module.RuminantModule):
                         codec_privates[stream["id"]]["parsed"] = parsed
                         self.buf.sapunit()
 
-                    with self.buf.subunit():
-                        stream["first-sample"] = chew(self.buf, blob_mode=True)
+                    stream["samples"] = {}
+
+                    for index in ranges:
+                        self.buf.seek(sample_offsets[stream["id"]][index])
+                        self.buf.pasunit(sample_sizes[stream["id"]][index])
+
+                        with self.buf.subunit():
+                            stream["samples"][index] = chew(self.buf, blob_mode=True)
+
+                        self.buf.sapunit()
                 case _:
                     if stream["id"] in codec_privates:
                         with self.buf:
@@ -3725,12 +3827,18 @@ class MatroskaModule(module.RuminantModule):
 
                             self.buf.sapunit()
 
-                    with self.buf.subunit():
-                        stream["first-sample"] = chew(self.buf, blob_mode=True)
+                    stream["samples"] = {}
+
+                    for index in ranges:
+                        self.buf.seek(sample_offsets[stream["id"]][index])
+                        self.buf.pasunit(sample_sizes[stream["id"]][index])
+
+                        with self.buf.subunit():
+                            stream["samples"][index] = chew(self.buf, blob_mode=True)
+
+                        self.buf.sapunit()
 
                     stream["unknown"] = True
-
-            self.buf.sapunit()
 
         return streams
 

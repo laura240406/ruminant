@@ -22,6 +22,7 @@ import json
 import tempfile
 import re
 import lzma
+from typing import Any, cast
 
 
 # inner part of xml_to_dict
@@ -1629,3 +1630,23 @@ def unpack_snappy(blob):
                 memcpy_snappy(data, offset, length)
 
     return bytes(data)
+
+
+def expand_ranges(s: Any, lower: int, upper: int) -> list[int]:
+    parts = cast(str, s).split(",")
+
+    ranges: list[int] = []
+    for part in parts:
+        if "-" in part:
+            a, b = part.split("-")
+
+            if a != "":
+                lower = int(a)
+            if b != "":
+                upper = int(b)
+
+            ranges += range(lower, upper + 1)
+        else:
+            ranges.append(int(part))
+
+    return sorted(list(set(ranges)))

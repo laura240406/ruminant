@@ -186,19 +186,19 @@ def main(dev=False):
     )
 
     parser.add_argument(
-        "--secret",
-        "-s",
+        "--parameter",
+        "-p",
         nargs=2,
         metavar=("ID", "VALUE"),
         action="append",
-        help="Supply single secret",
+        help="Supply single parameter",
     )
 
     parser.add_argument(
-        "--secret-file",
+        "--parameter-file",
         nargs=1,
         action="append",
-        help="Supply a secret file",
+        help="Supply a parameter file",
     )
 
     parser.add_argument(
@@ -248,7 +248,7 @@ def main(dev=False):
 
     if has_tqdm:
         # add tqdm specific options
-        parser.add_argument("--progress", "-p", action="store_true", help="Print progress")
+        parser.add_argument("--progress", action="store_true", help="Print progress")
 
         parser.add_argument(
             "--progress-names",
@@ -303,17 +303,17 @@ def main(dev=False):
                 print(f"Cannot parse blob ID {k}", file=sys.stderr)
                 exit(1)
 
-    if args.secret is not None:
-        for k, v in args.secret:
-            # register secrets
+    if args.parameter is not None:
+        for k, v in args.parameter:
+            # register parameter
             secrets.set(k, v)
 
-    if args.secret_file is not None:
-        for fn in args.secret_file:
+    if args.parameter_file is not None:
+        for fn in args.parameter_file:
             fn = fn[0]
 
             try:
-                # read json from file and register secrets
+                # read json from file and register parameters
                 with open(fn, "r") as f:
                     for k, v in json.load(f).items():
                         secrets.set(k, v)
