@@ -3243,7 +3243,9 @@ class MatroskaModule(module.RuminantModule):
             self.buf.sapunit()
 
         for stream in streams:
-            ranges: list[int] = utils.expand_ranges(secrets.get_parameter("0", stream, "ranges"), 0, len(sample_offsets) - 1)
+            ranges: list[int] = utils.expand_ranges(
+                secrets.get_parameter("0", stream, "ranges"), 0, len(sample_offsets[track_id]) - 1
+            )
 
             parsed: dict = {}
             nalu: dict = {}
