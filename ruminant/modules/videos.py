@@ -676,6 +676,191 @@ class FFMpreg(object):
         return obu
 
     @staticmethod
+    def read_h265_profile_tier_level(buf, profile_present_flag, max_num_sub_layers_minus_one):
+        nal = {}
+
+        if profile_present_flag:
+            nal["general-profile-space"] = buf.rb(2)
+            nal["general-tier-flag"] = buf.rb(1)
+            nal["general-profile-idc"] = buf.rb(5)
+            nal["general-profile-compatibility-flags"] = buf.rb(32)
+            nal["general-progressive-source-flag"] = buf.rb(1)
+            nal["general-interlaced-source-flag"] = buf.rb(1)
+            nal["general-non-packed-constraint-flag"] = buf.rb(1)
+            nal["general-frame-only-constraint-flag"] = buf.rb(1)
+
+            if (
+                nal["general-profile-idc"] in (4, 5, 6, 7, 8, 9, 10, 11)
+                or nal["general-profile-compatibility-flags"] & 0x0ff00000
+            ):
+                nal["general-max-12bit-constraint-flag"] = buf.rb(1)
+                nal["general-max-10bit-constraint-flag"] = buf.rb(1)
+                nal["general-max-8bit-constraint-flag"] = buf.rb(1)
+                nal["general-max-422chroma-constraint-flag"] = buf.rb(1)
+                nal["general-max-420chroma-constraint-flag"] = buf.rb(1)
+                nal["general-max-monochrome-constraint-flag"] = buf.rb(1)
+                nal["general-intra-constraint-flag"] = buf.rb(1)
+                nal["general-one-picture-only-constraint-flag"] = buf.rb(1)
+                nal["general-lower-bit-rate-constraint-flag"] = buf.rb(1)
+                nal["general-reserved-zero-34bits"] = buf.rb(34)
+            else:
+                nal["general-reserved-zero-43bits"] = buf.rb(43)
+
+            if nal["general-profile-idc"] in (1, 2, 3, 4, 5) or nal["general-profile-compatibility-flags"] & 0x7c000000:
+                nal["general-inbld-flag"] = buf.rb(1)
+            else:
+                nal["general-reserved-zero-bit"] = buf.rb(1)
+
+        nal["general-level-idc"] = buf.rb(8)
+
+        nal["sub-layer-profile-level-present-flags"] = [(buf.rb(1), buf.rb(1)) for i in range(0, max_num_sub_layers_minus_one)]
+
+        if max_num_sub_layers_minus_one > 0:
+            nal["reserved-zero-2bits"] = buf.rb(2 * (8 - max_num_sub_layers_minus_one))
+
+        nal["sub-layers"] = []
+
+        for i in range(0, max_num_sub_layers_minus_one):
+            sub = {}
+            if nal["sub-layer-profile-level-present-flags"][i][0]:
+                sub["sub-layer-profile-space"] = buf.rb(2)
+                sub["sub-layer-tier-flag"] = buf.rb(1)
+                sub["sub-layer-profile-idc"] = buf.rb(5)
+                sub["sub-layer-profile-compatibility-flags"] = buf.rb(32)
+                sub["sub-layer-progressive-source-flag"] = buf.rb(1)
+                sub["sub-layer-interlaced-source-flag"] = buf.rb(1)
+                sub["sub-layer-non-packed-constraint-flag"] = buf.rb(1)
+                sub["sub-layer-frame-only-constraint-flag"] = buf.rb(1)
+
+                if (
+                    sub["sub-layer-profile-idc"] in (4, 5, 6, 7, 8, 9, 10, 11)
+                    or sub["sub-layer-profile-compatibility-flags"] & 0x0ff00000
+                ):
+                    sub["sub-layer-max-12bit-constraint-flag"] = buf.rb(1)
+                    sub["sub-layer-max-10bit-constraint-flag"] = buf.rb(1)
+                    sub["sub-layer-max-8bit-constraint-flag"] = buf.rb(1)
+                    sub["sub-layer-max-422chroma-constraint-flag"] = buf.rb(1)
+                    sub["sub-layer-max-420chroma-constraint-flag"] = buf.rb(1)
+                    sub["sub-layer-max-monochrome-constraint-flag"] = buf.rb(1)
+                    sub["sub-layer-intra-constraint-flag"] = buf.rb(1)
+                    sub["sub-layer-one-picture-only-constraint-flag"] = buf.rb(1)
+                    sub["sub-layer-lower-bit-rate-constraint-flag"] = buf.rb(1)
+                    sub["sub-layer-reserved-zero-34bits"] = buf.rb(34)
+                else:
+                    sub["sub-layer-reserved-zero-43bits"] = buf.rb(43)
+
+                if sub["sub-layer-profile-idc"] in (1, 2, 3, 4, 5) or sub["sub-layer-profile-compatibility-flags"] & 0x7c000000:
+                    sub["sub-layer-inbld-flag"] = buf.rb(1)
+                else:
+                    sub["sub-layer-reserved-zero-bit"] = buf.rb(1)
+
+            if nal["sub-layer-profile-level-present-flags"][i][1]:
+                sub["sub-layer-level-idc"] = buf.rb(8)
+
+            nal["sub-layers"].append(sub)
+
+        return nal
+
+    @staticmethod
+    def read_h265_hrd_parameters(buf, cprms_present_flag, max_sub_layers_minus_one):
+        nal = {}
+
+        if cprms_present_flag:
+            nal["nal-hrd-parameters-present-flag"] = buf.rb(1)
+            nal["vcl-hrd-parameters-present-flag"] = buf.rb(1)
+
+            if nal["nal-hrd-parameters-present-flag"] or nal["vcl-hrd-parameters-present-flag"]:
+                nal["sub-pic-hrd-params-present-flag"] = buf.rb(1)
+
+                if nal["sub-pic-hrd-params-present-flag"]:
+                    nal["tick-divisor-minus2"] = buf.rb(8)
+                    nal["du-cpb-removal-delay-increment-length-minus1"] = buf.rb(5)
+                    nal["sub-pic-cpb-params-in-pic-timing-sei-flag"] = buf.rb(1)
+                    nal["dpb-output-delay-du-length-minus1"] = buf.rb(5)
+
+                nal["bit-rate-scale"] = buf.rb(4)
+                nal["cpb-size-scale"] = buf.rb(4)
+
+                if nal.get("sub-pic-hrd-params-present-flag"):
+                    nal["cpb-size-du-scale"] = buf.rb(4)
+
+                nal["initial-cpb-removal-delay-length-minus1"] = buf.rb(5)
+                nal["au-cpb-removal-delay-length-minus1"] = buf.rb(5)
+                nal["dpb-output-delay-length-minus1"] = buf.rb(5)
+
+        for i in range(max_sub_layers_minus_one + 1):
+            if "fixed-pic-rate-general-flag" not in nal:
+                nal["fixed-pic-rate-general-flag"] = {}
+            nal["fixed-pic-rate-general-flag"][i] = buf.rb(1)
+
+            if not nal["fixed-pic-rate-general-flag"][i]:
+                if "fixed-pic-rate-within-cvs-flag" not in nal:
+                    nal["fixed-pic-rate-within-cvs-flag"] = {}
+                nal["fixed-pic-rate-within-cvs-flag"][i] = buf.rb(1)
+
+            if nal.get("fixed-pic-rate-within-cvs-flag", {}).get(i, nal["fixed-pic-rate-general-flag"][i]):
+                if "elemental-duration-in-tc-minus1" not in nal:
+                    nal["elemental-duration-in-tc-minus1"] = {}
+                nal["elemental-duration-in-tc-minus1"][i] = buf.rue()
+            else:
+                if "low-delay-hrd-flag" not in nal:
+                    nal["low-delay-hrd-flag"] = {}
+                nal["low-delay-hrd-flag"][i] = buf.rb(1)
+
+            if not nal.get("low-delay-hrd-flag", {}).get(i, 0):
+                if "cpb-cnt-minus1" not in nal:
+                    nal["cpb-cnt-minus1"] = {}
+                nal["cpb-cnt-minus1"][i] = buf.rue()
+
+            if nal.get("nal-hrd-parameters-present-flag"):
+                for j in range(nal.get("cpb-cnt-minus1", {}).get(i, 0) + 1):
+                    if "bit-rate-value-minus1" not in nal:
+                        nal["bit-rate-value-minus1"] = {}
+                    nal["bit-rate-value-minus1"][j] = buf.rue()
+
+                    if "cpb-size-value-minus1" not in nal:
+                        nal["cpb-size-value-minus1"] = {}
+                    nal["cpb-size-value-minus1"][j] = buf.rue()
+
+                    if nal.get("sub-pic-hrd-params-present-flag"):
+                        if "cpb-size-du-value-minus1" not in nal:
+                            nal["cpb-size-du-value-minus1"] = {}
+                        nal["cpb-size-du-value-minus1"][j] = buf.rue()
+
+                        if "bit-rate-du-value-minus1" not in nal:
+                            nal["bit-rate-du-value-minus1"] = {}
+                        nal["bit-rate-du-value-minus1"][j] = buf.rue()
+
+                    if "cbr-flag" not in nal:
+                        nal["cbr-flag"] = {}
+                    nal["cbr-flag"][j] = buf.rb(1)
+
+            if nal.get("vcl-hrd-parameters-present-flag"):
+                for j in range(nal.get("cpb-cnt-minus1", {}).get(i, 0) + 1):
+                    if "bit-rate-value-minus1" not in nal:
+                        nal["bit-rate-value-minus1"] = {}
+                    nal["bit-rate-value-minus1"][j] = buf.rue()
+
+                    if "cpb-size-value-minus1" not in nal:
+                        nal["cpb-size-value-minus1"] = {}
+                    nal["cpb-size-value-minus1"][j] = buf.rue()
+
+                    if nal.get("sub-pic-hrd-params-present-flag"):
+                        if "cpb-size-du-value-minus1" not in nal:
+                            nal["cpb-size-du-value-minus1"] = {}
+                        nal["cpb-size-du-value-minus1"][j] = buf.rue()
+
+                        if "bit-rate-du-value-minus1" not in nal:
+                            nal["bit-rate-du-value-minus1"] = {}
+                        nal["bit-rate-du-value-minus1"][j] = buf.rue()
+
+                    if "cbr-flag" not in nal:
+                        nal["cbr-flag"] = {}
+                    nal["cbr-flag"][j] = buf.rb(1)
+
+        return nal
+
+    @staticmethod
     def read_h265_nalu(buf: Buf, state={}) -> dict:
         buf = Buf(
             buf
@@ -762,6 +947,63 @@ class FFMpreg(object):
                     nal["seis"].append(sei)
             case "AUD_NUT":
                 nal["pic-type"] = utils.unraw(buf.rb(3), 1, {0x00: "I", 0x01: "P/I", 0x02: "B/P/I"}, True)
+                buf.align()
+            case "VPS_NUT":
+                nal["video-parameter-set-id"] = buf.rb(4)
+                nal["base-layer-internal-flag"] = buf.rb(1)
+                nal["base-layer-available-flag"] = buf.rb(1)
+                nal["max-layers-minus1"] = buf.rb(6)
+                nal["max-sub-layers-minus1"] = buf.rb(3)
+                nal["temporal-id-nesting-flag"] = buf.rb(1)
+                nal["reserved"] = buf.ru16()
+                nal["profile-tier-level"] = FFMpreg.read_h265_profile_tier_level(buf, 1, nal["max-sub-layers-minus1"])
+                nal["sub-layer-ordering-info-present-flag"] = buf.rb(1)
+                nal["sub-layer-ordering-infos"] = [
+                    {
+                        "max-dec-pic-buffering-minus1": buf.rue(),
+                        "max-num-reorder-pics": buf.rue(),
+                        "max-latency-increase-plus1": buf.rue(),
+                    }
+                    for i in range(0, nal["max-sub-layers-minus1"] + 1 if nal["sub-layer-ordering-info-present-flag"] else 1)
+                ]
+                nal["max-layer-id"] = buf.rb(6)
+                nal["num-layer-sets-minus1"] = buf.rue()
+                nal["layer-id-included-flags"] = [
+                    buf.rb(nal["max-layer-id"] + 1) for i in range(0, nal["num-layer-sets-minus1"])
+                ]
+                nal["timing-info-present-flag"] = buf.rb(1)
+
+                if nal["timing-info-present-flag"]:
+                    nal["num-units-in-tick"] = buf.rb(32)
+                    nal["time-scale"] = buf.rb(32)
+                    nal["poc-proportional-to-timing-flag"] = buf.rb(1)
+
+                    if nal["poc-proportional-to-timing-flag"]:
+                        nal["num-ticks-poc-diff-one-minus1"] = buf.rue()
+
+                    nal["num-hrd-parameters"] = buf.rue()
+
+                    nal["hrd-parameters"] = []
+                    for i in range(0, nal["num-hrd-parameters"]):
+                        hrd = {}
+                        hrd["hrd-layer-set-idx"] = buf.rue()
+
+                        if i > 0:
+                            hrd["cprms-present-flag"] = buf.rb(1)
+
+                        hrd |= FFMpreg.read_h265_hrd_parameters(
+                            buf, hrd.get("cprms-present-flag", 1), nal["max-sub-layers-minus1"]
+                        )
+
+                nal["extension-flag"] = buf.rb(1)
+                if nal["extension-flag"]:
+                    i = buf.rb(buf.available() * 8 - buf._bits)
+
+                    while i and not i & 1:
+                        i >>= 1
+
+                    nal["extension-data-flag"] = i >> 1
+
                 buf.align()
             case _:
                 nal["unknown"] = True
