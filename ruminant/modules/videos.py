@@ -290,6 +290,7 @@ class FFMpreg(object):
 
                     if nal["chroma-format-idc"] == 3:
                         nal["separate-colour-plane-flag"] = buf.rb(1)
+                        state["separate-colour-plane-flag"] = nal["separate-colour-plane-flag"]
 
                     nal["bit-depth-luma-minus-eight"] = buf.rue()
                     nal["bit-depth-chroma-minus-eight"] = buf.rue()
@@ -306,10 +307,13 @@ class FFMpreg(object):
                             nal["seq-scaling-matrices"].append(matrix)
 
                 nal["log2-max-frame-num-minus4"] = buf.rue()
+                state["log2-max-frame-num-minus4"] = nal["log2-max-frame-num-minus4"]
                 nal["pic-order-cnt-type"] = buf.rue()
+                state["pic-order-cnt-type"] = nal["pic-order-cnt-type"]
 
                 if nal["pic-order-cnt-type"] == 0:
                     nal["log2-max-pic-order-cnt-lsb-minus4"] = buf.rue()
+                    state["log2-max-pic-order-cnt-lsb-minus4"] = nal["log2-max-pic-order-cnt-lsb-minus4"]
                 elif nal["pic-order-cnt-type"] == 1:
                     nal["delta-pic-order-always-zero-flag"] = buf.rb(1)
                     nal["offset-for-non-ref-pic"] = buf.rse()
@@ -322,6 +326,7 @@ class FFMpreg(object):
                 nal["pic-width-in-mbs-minus-one"] = buf.rue()
                 nal["pic-height-in-map-units-minus-one"] = buf.rue()
                 nal["frame-mbs-only-flag"] = buf.rb(1)
+                state["frame-mbs-only-flag"] = nal["frame-mbs-only-flag"]
 
                 if not nal["frame-mbs-only-flag"]:
                     nal["mb-adaptive-frame-field-flag"] = buf.rb(1)
@@ -408,6 +413,7 @@ class FFMpreg(object):
                 nal["seq-parameter-set-id"] = buf.rue()
                 nal["entropy-coding-mode-flag"] = buf.rb(1)
                 nal["bottom-field-pic-order-in-frame-present-flag"] = buf.rb(1)
+                state["bottom-field-pic-order-in-frame-present-flag"] = nal["bottom-field-pic-order-in-frame-present-flag"]
                 nal["num-slice-groups-minus-one"] = buf.rue()
 
                 if nal["num-slice-groups-minus-one"] > 0:
@@ -457,6 +463,33 @@ class FFMpreg(object):
                             nal["pic-scaling-matrices"].append(matrix)
 
                         nal["second-chroma-qp-index-offset"] = buf.rse()
+
+                buf.align()
+            case "Coded slice of an IDR picture" | "Coded slice of a non-IDR picture":
+                nal["first_mb_in_slice"] = buf.rue()
+                nal["slice_type"] = buf.rue()
+                nal["pic_parameter_set_id"] = buf.rue()
+
+                if state.get("separate-colour-plane-flag"):
+                    nal["colour_plane_id"] = buf.rb(2)
+
+                nal["frame-num"] = buf.rb(state.get("log2-max-frame-num-minus4", 0) + 4)
+
+                if not state.get("frame-mbs-only-flag"):
+                    nal["field_pic_flag"] = buf.rb(1)
+
+                    if nal["field_pic_flag"]:
+                        nal["bottom_field_flag"] = buf.rb(1)
+
+                if nal["unit-type"] == "Coded slice of an IDR picture":
+                    nal["idr_pic_id"] = buf.rue()
+
+                temp = state.get("pic-order-cnt-type", 0)
+                if temp == 0:
+                    nal["pic_order_cnt_lsb"] = buf.rb(state.get("log2-max-pic-order-cnt-lsb-minus4", 0) + 4)
+
+                    if state.get("bottom-field-pic-order-in-frame-present-flag") and not state.get("field-pic-flag"):
+                        nal["delta_pic_order_cnt_bottom"] = buf.rse()
 
                 buf.align()
             case "Supplemental enhancement information":
