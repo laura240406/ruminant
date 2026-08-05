@@ -3527,7 +3527,22 @@ class MatroskaModule(module.RuminantModule):
                         self.buf.seek(codec_privates[stream["id"]]["data-offset"])
                         self.buf.pasunit(codec_privates[stream["id"]]["length"])
 
-                        parsed["payload"] = self.buf.rh(self.buf.unit)
+                        parsed["marker"] = self.buf.rb(1)
+                        parsed["version"] = self.buf.rb(7)
+                        parsed["seq-profile-idc"] = self.buf.rb(5)
+                        parsed["seq-level-idx-0"] = self.buf.rb(5)
+                        parsed["seq-tier-0"] = self.buf.rb(1)
+                        parsed["bitdepth-idx"] = self.buf.rb(2)
+                        parsed["monochrome"] = self.buf.rb(1)
+                        parsed["chroma-subsampling-x"] = self.buf.rb(1)
+                        parsed["chroma-subsampling-y"] = self.buf.rb(1)
+                        parsed["chroma-sample-position"] = self.buf.rb(3)
+                        parsed["initial-presentation-delay-present"] = self.buf.rb(1)
+
+                        if parsed["initial-presentation-delay-present"]:
+                            parsed["initial-presentation-delay-minus-one"] = self.buf.rb(4)
+                        else:
+                            parsed["reserved"] = self.buf.rb(4)
 
                         parsed["obus"] = []
                         while self.buf.hasunit():
