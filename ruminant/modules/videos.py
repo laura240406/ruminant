@@ -170,6 +170,40 @@ class FFMpreg(object):
         0x0e: "RESERVED",
         0x0f: "PADDING",
     }
+    AV2_OBU_TYPES = {
+        0x00: "RESERVED",
+        0x01: "SEQUENCE_HEADER",
+        0x02: "TEMPORAL_DELIMITER",
+        0x03: "MULTI_FRAME_HEADER",
+        0x04: "CLOSED_LOOP_KEY",
+        0x05: "OPEN_LOOP_KEY",
+        0x06: "LEADING_TILE_GROUP",
+        0x07: "REGULAR_TILE_GROUP",
+        0x08: "METADATA_SHORT",
+        0x09: "METADATA_GROUP",
+        0x0a: "SWITCH",
+        0x0b: "LEADING_SEF",
+        0x0c: "REGULAR_SEF",
+        0x0d: "LEADING_TIP",
+        0x0e: "REGULAR_TIP",
+        0x0f: "BUFFER_REMOVAL_TIMING",
+        0x10: "LAYER_CONFIGURATION_RECORD",
+        0x11: "ATLAS_SEGMENT",
+        0x12: "OPERATING_POINT_SET",
+        0x13: "BRIDGE_FRAME",
+        0x14: "MSDO",
+        0x15: "RAS_FRAME",
+        0x16: "QUANTIZATION_MATRIX",
+        0x17: "FILM_GRAIN",
+        0x18: "CONTENT_INTERPRETATION",
+        0x19: "PADDING",
+        0x1a: "RESERVED",
+        0x1b: "RESERVED",
+        0x1c: "RESERVED",
+        0x1d: "RESERVED",
+        0x1e: "RESERVED",
+        0x1f: "RESERVED",
+    }
 
     @staticmethod
     def read_h264_scaling_list(buf, count):
@@ -189,16 +223,16 @@ class FFMpreg(object):
     @staticmethod
     def read_h264_hrd_parameters(buf):
         nal = {}
-        nal["cpb-cnt-minus1"] = buf.rue()
+        nal["cpb-cnt-minus-one"] = buf.rue()
         nal["bit-rate-scale"] = buf.rb(4)
         nal["cpb-size-scale"] = buf.rb(4)
         nal["list"] = [
-            {"bit-rate-value-minus1": buf.rue(), "cpb-size-value-minus1": buf.rue(), "cbr-flag": buf.rb(1)}
-            for i in range(0, nal["cpb-cnt-minus1"] + 1)
+            {"bit-rate-value-minus-one": buf.rue(), "cpb-size-value-minus-one": buf.rue(), "cbr-flag": buf.rb(1)}
+            for i in range(0, nal["cpb-cnt-minus-one"] + 1)
         ]
-        nal["initial-cpb-removal-delay-length-minus1"] = buf.rb(5)
-        nal["cpb-removal-delay-length-minus1"] = buf.rb(5)
-        nal["dpb-output-delay-length-minus1"] = buf.rb(5)
+        nal["initial-cpb-removal-delay-length-minus-one"] = buf.rb(5)
+        nal["cpb-removal-delay-length-minus-one"] = buf.rb(5)
+        nal["dpb-output-delay-length-minus-one"] = buf.rb(5)
         nal["time-offset-length"] = buf.rb(5)
 
         return nal
@@ -285,8 +319,8 @@ class FFMpreg(object):
 
                 nal["max-num-ref-frames"] = buf.rue()
                 nal["gaps-in-frame-num-value-allowed-flag"] = buf.rb(1)
-                nal["pic-width-in-mbs-minus1"] = buf.rue()
-                nal["pic-height-in-map-units-minus1"] = buf.rue()
+                nal["pic-width-in-mbs-minus-one"] = buf.rue()
+                nal["pic-height-in-map-units-minus-one"] = buf.rue()
                 nal["frame-mbs-only-flag"] = buf.rb(1)
 
                 if not nal["frame-mbs-only-flag"]:
@@ -774,9 +808,9 @@ class FFMpreg(object):
 
                 if nal["sub-pic-hrd-params-present-flag"]:
                     nal["tick-divisor-minus2"] = buf.rb(8)
-                    nal["du-cpb-removal-delay-increment-length-minus1"] = buf.rb(5)
+                    nal["du-cpb-removal-delay-increment-length-minus-one"] = buf.rb(5)
                     nal["sub-pic-cpb-params-in-pic-timing-sei-flag"] = buf.rb(1)
-                    nal["dpb-output-delay-du-length-minus1"] = buf.rb(5)
+                    nal["dpb-output-delay-du-length-minus-one"] = buf.rb(5)
 
                 nal["bit-rate-scale"] = buf.rb(4)
                 nal["cpb-size-scale"] = buf.rb(4)
@@ -784,9 +818,9 @@ class FFMpreg(object):
                 if nal.get("sub-pic-hrd-params-present-flag"):
                     nal["cpb-size-du-scale"] = buf.rb(4)
 
-                nal["initial-cpb-removal-delay-length-minus1"] = buf.rb(5)
-                nal["au-cpb-removal-delay-length-minus1"] = buf.rb(5)
-                nal["dpb-output-delay-length-minus1"] = buf.rb(5)
+                nal["initial-cpb-removal-delay-length-minus-one"] = buf.rb(5)
+                nal["au-cpb-removal-delay-length-minus-one"] = buf.rb(5)
+                nal["dpb-output-delay-length-minus-one"] = buf.rb(5)
 
         for i in range(max_sub_layers_minus_one + 1):
             if "fixed-pic-rate-general-flag" not in nal:
@@ -799,60 +833,60 @@ class FFMpreg(object):
                 nal["fixed-pic-rate-within-cvs-flag"][i] = buf.rb(1)
 
             if nal.get("fixed-pic-rate-within-cvs-flag", {}).get(i, nal["fixed-pic-rate-general-flag"][i]):
-                if "elemental-duration-in-tc-minus1" not in nal:
-                    nal["elemental-duration-in-tc-minus1"] = {}
-                nal["elemental-duration-in-tc-minus1"][i] = buf.rue()
+                if "elemental-duration-in-tc-minus-one" not in nal:
+                    nal["elemental-duration-in-tc-minus-one"] = {}
+                nal["elemental-duration-in-tc-minus-one"][i] = buf.rue()
             else:
                 if "low-delay-hrd-flag" not in nal:
                     nal["low-delay-hrd-flag"] = {}
                 nal["low-delay-hrd-flag"][i] = buf.rb(1)
 
             if not nal.get("low-delay-hrd-flag", {}).get(i, 0):
-                if "cpb-cnt-minus1" not in nal:
-                    nal["cpb-cnt-minus1"] = {}
-                nal["cpb-cnt-minus1"][i] = buf.rue()
+                if "cpb-cnt-minus-one" not in nal:
+                    nal["cpb-cnt-minus-one"] = {}
+                nal["cpb-cnt-minus-one"][i] = buf.rue()
 
             if nal.get("nal-hrd-parameters-present-flag"):
-                for j in range(nal.get("cpb-cnt-minus1", {}).get(i, 0) + 1):
-                    if "bit-rate-value-minus1" not in nal:
-                        nal["bit-rate-value-minus1"] = {}
-                    nal["bit-rate-value-minus1"][j] = buf.rue()
+                for j in range(nal.get("cpb-cnt-minus-one", {}).get(i, 0) + 1):
+                    if "bit-rate-value-minus-one" not in nal:
+                        nal["bit-rate-value-minus-one"] = {}
+                    nal["bit-rate-value-minus-one"][j] = buf.rue()
 
-                    if "cpb-size-value-minus1" not in nal:
-                        nal["cpb-size-value-minus1"] = {}
-                    nal["cpb-size-value-minus1"][j] = buf.rue()
+                    if "cpb-size-value-minus-one" not in nal:
+                        nal["cpb-size-value-minus-one"] = {}
+                    nal["cpb-size-value-minus-one"][j] = buf.rue()
 
                     if nal.get("sub-pic-hrd-params-present-flag"):
-                        if "cpb-size-du-value-minus1" not in nal:
-                            nal["cpb-size-du-value-minus1"] = {}
-                        nal["cpb-size-du-value-minus1"][j] = buf.rue()
+                        if "cpb-size-du-value-minus-one" not in nal:
+                            nal["cpb-size-du-value-minus-one"] = {}
+                        nal["cpb-size-du-value-minus-one"][j] = buf.rue()
 
-                        if "bit-rate-du-value-minus1" not in nal:
-                            nal["bit-rate-du-value-minus1"] = {}
-                        nal["bit-rate-du-value-minus1"][j] = buf.rue()
+                        if "bit-rate-du-value-minus-one" not in nal:
+                            nal["bit-rate-du-value-minus-one"] = {}
+                        nal["bit-rate-du-value-minus-one"][j] = buf.rue()
 
                     if "cbr-flag" not in nal:
                         nal["cbr-flag"] = {}
                     nal["cbr-flag"][j] = buf.rb(1)
 
             if nal.get("vcl-hrd-parameters-present-flag"):
-                for j in range(nal.get("cpb-cnt-minus1", {}).get(i, 0) + 1):
-                    if "bit-rate-value-minus1" not in nal:
-                        nal["bit-rate-value-minus1"] = {}
-                    nal["bit-rate-value-minus1"][j] = buf.rue()
+                for j in range(nal.get("cpb-cnt-minus-one", {}).get(i, 0) + 1):
+                    if "bit-rate-value-minus-one" not in nal:
+                        nal["bit-rate-value-minus-one"] = {}
+                    nal["bit-rate-value-minus-one"][j] = buf.rue()
 
-                    if "cpb-size-value-minus1" not in nal:
-                        nal["cpb-size-value-minus1"] = {}
-                    nal["cpb-size-value-minus1"][j] = buf.rue()
+                    if "cpb-size-value-minus-one" not in nal:
+                        nal["cpb-size-value-minus-one"] = {}
+                    nal["cpb-size-value-minus-one"][j] = buf.rue()
 
                     if nal.get("sub-pic-hrd-params-present-flag"):
-                        if "cpb-size-du-value-minus1" not in nal:
-                            nal["cpb-size-du-value-minus1"] = {}
-                        nal["cpb-size-du-value-minus1"][j] = buf.rue()
+                        if "cpb-size-du-value-minus-one" not in nal:
+                            nal["cpb-size-du-value-minus-one"] = {}
+                        nal["cpb-size-du-value-minus-one"][j] = buf.rue()
 
-                        if "bit-rate-du-value-minus1" not in nal:
-                            nal["bit-rate-du-value-minus1"] = {}
-                        nal["bit-rate-du-value-minus1"][j] = buf.rue()
+                        if "bit-rate-du-value-minus-one" not in nal:
+                            nal["bit-rate-du-value-minus-one"] = {}
+                        nal["bit-rate-du-value-minus-one"][j] = buf.rue()
 
                     if "cbr-flag" not in nal:
                         nal["cbr-flag"] = {}
@@ -952,24 +986,24 @@ class FFMpreg(object):
                 nal["video-parameter-set-id"] = buf.rb(4)
                 nal["base-layer-internal-flag"] = buf.rb(1)
                 nal["base-layer-available-flag"] = buf.rb(1)
-                nal["max-layers-minus1"] = buf.rb(6)
-                nal["max-sub-layers-minus1"] = buf.rb(3)
+                nal["max-layers-minus-one"] = buf.rb(6)
+                nal["max-sub-layers-minus-one"] = buf.rb(3)
                 nal["temporal-id-nesting-flag"] = buf.rb(1)
                 nal["reserved"] = buf.ru16()
-                nal["profile-tier-level"] = FFMpreg.read_h265_profile_tier_level(buf, 1, nal["max-sub-layers-minus1"])
+                nal["profile-tier-level"] = FFMpreg.read_h265_profile_tier_level(buf, 1, nal["max-sub-layers-minus-one"])
                 nal["sub-layer-ordering-info-present-flag"] = buf.rb(1)
                 nal["sub-layer-ordering-infos"] = [
                     {
-                        "max-dec-pic-buffering-minus1": buf.rue(),
+                        "max-dec-pic-buffering-minus-one": buf.rue(),
                         "max-num-reorder-pics": buf.rue(),
                         "max-latency-increase-plus1": buf.rue(),
                     }
-                    for i in range(0, nal["max-sub-layers-minus1"] + 1 if nal["sub-layer-ordering-info-present-flag"] else 1)
+                    for i in range(0, nal["max-sub-layers-minus-one"] + 1 if nal["sub-layer-ordering-info-present-flag"] else 1)
                 ]
                 nal["max-layer-id"] = buf.rb(6)
-                nal["num-layer-sets-minus1"] = buf.rue()
+                nal["num-layer-sets-minus-one"] = buf.rue()
                 nal["layer-id-included-flags"] = [
-                    buf.rb(nal["max-layer-id"] + 1) for i in range(0, nal["num-layer-sets-minus1"])
+                    buf.rb(nal["max-layer-id"] + 1) for i in range(0, nal["num-layer-sets-minus-one"])
                 ]
                 nal["timing-info-present-flag"] = buf.rb(1)
 
@@ -979,7 +1013,7 @@ class FFMpreg(object):
                     nal["poc-proportional-to-timing-flag"] = buf.rb(1)
 
                     if nal["poc-proportional-to-timing-flag"]:
-                        nal["num-ticks-poc-diff-one-minus1"] = buf.rue()
+                        nal["num-ticks-poc-diff-one-minus-one"] = buf.rue()
 
                     nal["num-hrd-parameters"] = buf.rue()
 
@@ -992,7 +1026,7 @@ class FFMpreg(object):
                             hrd["cprms-present-flag"] = buf.rb(1)
 
                         hrd |= FFMpreg.read_h265_hrd_parameters(
-                            buf, hrd.get("cprms-present-flag", 1), nal["max-sub-layers-minus1"]
+                            buf, hrd.get("cprms-present-flag", 1), nal["max-sub-layers-minus-one"]
                         )
 
                 nal["extension-flag"] = buf.rb(1)
@@ -1035,6 +1069,34 @@ class FFMpreg(object):
                 nal["pic-type"] = utils.unraw(buf.rb(3), 1, {0x00: "I", 0x01: "P/I", 0x02: "B/P/I"}, True)
 
         return nal
+
+    @staticmethod
+    def read_av2_obu(buf: Buf, state={}) -> dict:
+        obu = {}
+        obu["length"] = buf.ruleb()
+        buf.pasunit(obu["length"])
+
+        obu["extension-flag"] = buf.rb(1)
+        obu["type"] = utils.unraw(
+            buf.rb(5),
+            1,
+            FFMpreg.AV2_OBU_TYPES,
+            True,
+        )
+        obu["tlayer-id"] = buf.rb(2)
+
+        if obu["extension-flag"]:
+            obu["mlayer-id"] = buf.rb(3)
+            obu["xlayer-id"] = buf.rb(5)
+
+        match obu["type"]:
+            case "TEMPORAL_DELIMITER":
+                pass
+            case _:
+                obu["unknown"] = True
+
+        buf.sapunit()
+        return obu
 
 
 @module.register
@@ -3458,6 +3520,31 @@ class MatroskaModule(module.RuminantModule):
                         stream["samples"][index] = []
                         while self.buf.hasunit():
                             stream["samples"][index].append(FFMpreg.read_av1_obu(self.buf))
+
+                        self.buf.sapunit()
+                case "V_AV2":
+                    with self.buf:
+                        self.buf.seek(codec_privates[stream["id"]]["data-offset"])
+                        self.buf.pasunit(codec_privates[stream["id"]]["length"])
+
+                        parsed["payload"] = self.buf.rh(self.buf.unit)
+
+                        parsed["obus"] = []
+                        while self.buf.hasunit():
+                            parsed["obus"].append(FFMpreg.read_av2_obu(self.buf))
+
+                        codec_privates[stream["id"]]["parsed"] = parsed
+                        self.buf.sapunit()
+
+                    stream["samples"] = {}
+
+                    for index in ranges:
+                        self.buf.seek(sample_offsets[stream["id"]][index])
+                        self.buf.pasunit(sample_sizes[stream["id"]][index])
+
+                        stream["samples"][index] = []
+                        while self.buf.hasunit():
+                            stream["samples"][index].append(FFMpreg.read_av2_obu(self.buf))
 
                         self.buf.sapunit()
                 case "V_DIRAC":

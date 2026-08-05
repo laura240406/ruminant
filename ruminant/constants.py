@@ -7230,6 +7230,7 @@ SPIRV_CAPABILITIES = {
     0x1487: "ShaderViewportMaskNV",
     0x148b: "ShaderStereoViewNV",
     0x148c: "PerViewAttributesNV",
+    0x14b6: "RuntimeDescriptorArray",
     0x15c0: "SubgroupShuffleINTEL",
     0x15c1: "SubgroupBufferBlockIOINTEL",
     0x15c2: "SubgroupImageBlockIOINTEL",
