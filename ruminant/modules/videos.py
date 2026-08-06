@@ -292,6 +292,8 @@ class FFMpreg(object):
                         nal["separate-colour-plane-flag"] = buf.rb(1)
                         state["separate-colour-plane-flag"] = nal["separate-colour-plane-flag"]
 
+                    state["chroma-array-type"] = 0 if nal.get("separate-colour-plane-flag", 0) else nal["chroma-format-idc"]
+
                     nal["bit-depth-luma-minus-eight"] = buf.rue()
                     nal["bit-depth-chroma-minus-eight"] = buf.rue()
                     nal["qpprime-y-zero-transform-bypass-flag"] = buf.rb(1)
@@ -316,6 +318,7 @@ class FFMpreg(object):
                     state["log2-max-pic-order-cnt-lsb-minus4"] = nal["log2-max-pic-order-cnt-lsb-minus4"]
                 elif nal["pic-order-cnt-type"] == 1:
                     nal["delta-pic-order-always-zero-flag"] = buf.rb(1)
+                    state["delta-pic-order-always-zero-flag"] = nal["delta-pic-order-always-zero-flag"]
                     nal["offset-for-non-ref-pic"] = buf.rse()
                     nal["offset-for-top-to-bottom-field"] = buf.rse()
                     nal["num-ref-frames-in-pic-order-cnt-cycle"] = buf.rue()
@@ -324,6 +327,7 @@ class FFMpreg(object):
                 nal["max-num-ref-frames"] = buf.rue()
                 nal["gaps-in-frame-num-value-allowed-flag"] = buf.rb(1)
                 nal["pic-width-in-mbs-minus-one"] = buf.rue()
+                state["pic-width-in-mbs-minus-one"] = nal["pic-width-in-mbs-minus-one"]
                 nal["pic-height-in-map-units-minus-one"] = buf.rue()
                 nal["frame-mbs-only-flag"] = buf.rb(1)
                 state["frame-mbs-only-flag"] = nal["frame-mbs-only-flag"]
@@ -412,39 +416,50 @@ class FFMpreg(object):
                 nal["pic-parameter-set-id"] = buf.rue()
                 nal["seq-parameter-set-id"] = buf.rue()
                 nal["entropy-coding-mode-flag"] = buf.rb(1)
+                state["entropy-coding-mode-flag"] = nal["entropy-coding-mode-flag"]
                 nal["bottom-field-pic-order-in-frame-present-flag"] = buf.rb(1)
                 state["bottom-field-pic-order-in-frame-present-flag"] = nal["bottom-field-pic-order-in-frame-present-flag"]
                 nal["num-slice-groups-minus-one"] = buf.rue()
+                state["num-slice-groups-minus-one"] = nal["num-slice-groups-minus-one"]
 
                 if nal["num-slice-groups-minus-one"] > 0:
                     nal["slice-group-map-type"] = buf.rue()
+                    state["slice-group-map-type"] = nal["slice-group-map-type"]
 
                     match nal["slice-group-map-type"]:
                         case 0:
-                            nal["run-length-minus-one"] = [buf.rue() for i in range(0, nal["num-slice-groups-minus-one"] + 1)]
+                            nal["run-length-minus-one"] = [buf.rue() for i in range(nal["num-slice-groups-minus-one"] + 1)]
                         case 1:
+                            pass
+                        case 2:
                             nal["top-left-and-bottom-right"] = [
-                                (buf.rue(), buf.rue()) for i in range(0, nal["num-slice-groups-minus-one"] + 1)
+                                (buf.rue(), buf.rue()) for i in range(nal["num-slice-groups-minus-one"])
                             ]
                         case 3 | 4 | 5:
-                            nal["slice-group-change-direction-flag-and-rate-minus-one"] = [
-                                (buf.rb(1), buf.rue()) for i in range(0, nal["num-slice-groups-minus-one"] + 1)
-                            ]
+                            nal["slice-group-change-direction-flag"] = buf.rb(1)
+                            nal["slice-group-change-rate-minus-one"] = buf.rue()
+                            state["slice-group-change-rate-minus-one"] = nal["slice-group-change-rate-minus-one"]
                         case 6:
                             nal["pic-size-in-map-units-minus-one"] = buf.rue()
                             v = math.ceil(math.log2(nal["num-slice-groups-minus-one"] + 1))
-                            nal["slice-group-id"] = [buf.rb(v) for i in range(0, nal["pic-size-in-map-units-minus-one"] + 1)]
+                            nal["slice-group-id"] = [buf.rb(v) for i in range(nal["pic-size-in-map-units-minus-one"] + 1)]
 
                 nal["num-ref-idx-l0-default-active-minus-one"] = buf.rue()
+                state["num-ref-idx-l0-default-active-minus-one"] = nal["num-ref-idx-l0-default-active-minus-one"]
                 nal["num-ref-idx-l1-default-active-minus-one"] = buf.rue()
+                state["num-ref-idx-l1-default-active-minus-one"] = nal["num-ref-idx-l1-default-active-minus-one"]
                 nal["weighted-pred-flag"] = buf.rb(1)
+                state["weighted-pred-flag"] = nal["weighted-pred-flag"]
                 nal["weighted-bipred-idc"] = buf.rb(2)
+                state["weighted-bipred-idc"] = nal["weighted-bipred-idc"]
                 nal["pic-init-qp-minus26"] = buf.rse()
                 nal["pic-init-qs-minus26"] = buf.rse()
                 nal["chroma-qp-index-offset"] = buf.rse()
                 nal["deblocking-filter-control-present-flag"] = buf.rb(1)
+                state["deblocking-filter-control-present-flag"] = nal["deblocking-filter-control-present-flag"]
                 nal["constrained-intra-pred-flag"] = buf.rb(1)
                 nal["redundant-pic-cnt-present-flag"] = buf.rb(1)
+                state["redundant-pic-cnt-present-flag"] = nal["redundant-pic-cnt-present-flag"]
 
                 if buf.available() > 0 and not (buf._bits == 0 and buf.pu8() == 0x80):
                     nal["transform-8x8-mode-flag"] = buf.rb(1)
@@ -452,44 +467,210 @@ class FFMpreg(object):
 
                     if nal["pic-scaling-matrix-present-flag"]:
                         nal["pic-scaling-matrices"] = []
-
-                        for i in range(0, 6 + (6 if state.get("chroma-format-idc") == 3 else 2)):
+                        num_matrices = 6 + ((6 if state.get("chroma-format-idc") == 3 else 2) * nal["transform-8x8-mode-flag"])
+                        for i in range(num_matrices):
                             matrix = []
                             if buf.rb(1):
-                                matrix = []
-                                if buf.rb(1):
-                                    matrix = FFMpreg.read_h264_scaling_list(buf, 16 if i < 6 else 64)
-
+                                matrix = FFMpreg.read_h264_scaling_list(buf, 16 if i < 6 else 64)
                             nal["pic-scaling-matrices"].append(matrix)
 
-                        nal["second-chroma-qp-index-offset"] = buf.rse()
+                    nal["second-chroma-qp-index-offset"] = buf.rse()
 
                 buf.align()
-            case "Coded slice of an IDR picture" | "Coded slice of a non-IDR picture":
-                nal["first_mb_in_slice"] = buf.rue()
-                nal["slice_type"] = buf.rue()
-                nal["pic_parameter_set_id"] = buf.rue()
+            case (
+                "Coded slice of an IDR picture"
+                | "Coded slice of a non-IDR picture"
+                | "Coded slice of an auxiliary coded picture without partitioning"
+            ):
+                nal["first-mb-in-slice"] = buf.rue()
+                nal["slice-type"] = buf.rue()
+                nal["pic-parameter-set-id"] = buf.rue()
 
                 if state.get("separate-colour-plane-flag"):
-                    nal["colour_plane_id"] = buf.rb(2)
+                    nal["colour-plane-id"] = buf.rb(2)
 
                 nal["frame-num"] = buf.rb(state.get("log2-max-frame-num-minus4", 0) + 4)
 
                 if not state.get("frame-mbs-only-flag"):
-                    nal["field_pic_flag"] = buf.rb(1)
+                    nal["field-pic-flag"] = buf.rb(1)
 
-                    if nal["field_pic_flag"]:
-                        nal["bottom_field_flag"] = buf.rb(1)
+                    if nal["field-pic-flag"]:
+                        nal["bottom-field-flag"] = buf.rb(1)
 
                 if nal["unit-type"] == "Coded slice of an IDR picture":
-                    nal["idr_pic_id"] = buf.rue()
+                    nal["idr-pic-id"] = buf.rue()
 
                 temp = state.get("pic-order-cnt-type", 0)
                 if temp == 0:
-                    nal["pic_order_cnt_lsb"] = buf.rb(state.get("log2-max-pic-order-cnt-lsb-minus4", 0) + 4)
+                    nal["pic-order-cnt-lsb"] = buf.rb(state.get("log2-max-pic-order-cnt-lsb-minus4", 0) + 4)
 
-                    if state.get("bottom-field-pic-order-in-frame-present-flag") and not state.get("field-pic-flag"):
-                        nal["delta_pic_order_cnt_bottom"] = buf.rse()
+                    if state.get("bottom-field-pic-order-in-frame-present-flag") and not nal.get("field-pic-flag"):
+                        nal["delta-pic-order-cnt-bottom"] = buf.rse()
+                if temp == 1 and not state.get("delta-pic-order-always-zero-flag"):
+                    nal["delta-pic-order-cnt"] = [buf.rse()]
+
+                    if state.get("bottom-field-pic-order-in-frame-present-flag") and not nal.get("field-pic-flag"):
+                        nal["delta-pic-order-cnt"].append(buf.rse())
+
+                if state.get("redundant-pic-cnt-present-flag"):
+                    nal["redundant-pic-cnt"] = buf.rue()
+
+                if nal["slice-type"] % 5 == 1:
+                    nal["direct-spatial-mv-pred-flag"] = buf.rb(1)
+
+                if nal["slice-type"] % 5 in (0, 1, 3):
+                    nal["num-ref-idx-active-override-flag"] = buf.rb(1)
+
+                    if nal["num-ref-idx-active-override-flag"]:
+                        nal["num-ref-idx-l0-active-minus-one"] = buf.rue()
+
+                        if nal["slice-type"] % 5 == 1:
+                            nal["num-ref-idx-l1-active-minus-one"] = buf.rue()
+
+                if nal["slice-type"] % 5 != 2 and nal["slice-type"] % 5 != 4:
+                    nal["ref-pic-list-modification-flag-l0"] = buf.rb(1)
+                    if nal["ref-pic-list-modification-flag-l0"]:
+                        while True:
+                            nal["modification-of-pic-nums-idc"] = buf.rue()
+                            if nal["modification-of-pic-nums-idc"] == 0 or nal["modification-of-pic-nums-idc"] == 1:
+                                nal["abs-diff-pic-num-minus-one"] = buf.rue()
+                            elif nal["modification-of-pic-nums-idc"] == 2:
+                                nal["long-term-pic-num"] = buf.rue()
+                            elif nal["unit-type"] == "Coded slice extension" and (
+                                nal["modification-of-pic-nums-idc"] == 4 or nal["modification-of-pic-nums-idc"] == 5
+                            ):
+                                nal["abs-diff-view-idx-minus-one"] = buf.rue()
+                            if nal["modification-of-pic-nums-idc"] == 3:
+                                break
+                if nal["slice-type"] % 5 == 1:
+                    nal["ref-pic-list-modification-flag-l1"] = buf.rb(1)
+                    if nal["ref-pic-list-modification-flag-l1"]:
+                        while True:
+                            nal["modification-of-pic-nums-idc"] = buf.rue()
+                            if nal["modification-of-pic-nums-idc"] == 0 or nal["modification-of-pic-nums-idc"] == 1:
+                                nal["abs-diff-pic-num-minus-one"] = buf.rue()
+                            elif nal["modification-of-pic-nums-idc"] == 2:
+                                nal["long-term-pic-num"] = buf.rue()
+                            elif nal["unit-type"] == "Coded slice extension" and (
+                                nal["modification-of-pic-nums-idc"] == 4 or nal["modification-of-pic-nums-idc"] == 5
+                            ):
+                                nal["abs-diff-view-idx-minus-one"] = buf.rue()
+                            if nal["modification-of-pic-nums-idc"] == 3:
+                                break
+
+                if (state.get("weighted-pred-flag", 0) and nal["slice-type"] % 5 in (0, 3)) or (
+                    state.get("weighted-bipred-idc", 0) == 1 and nal["slice-type"] % 5 == 1
+                ):
+                    nal["luma-log2-weight-denom"] = buf.rue()
+                    if state.get("chroma-array-type", 0) != 0:
+                        nal["chroma-log2-weight-denom"] = buf.rue()
+                    nal["luma-weight-l0-flag"] = {}
+                    nal["luma-weight-l0"] = {}
+                    nal["luma-offset-l0"] = {}
+                    nal["chroma-weight-l0-flag"] = {}
+                    nal["chroma-weight-l0"] = {}
+                    nal["chroma-offset-l0"] = {}
+                    for i in range(
+                        0,
+                        nal.get("num-ref-idx-l0-active-minus-one", state.get("num-ref-idx-l0-default-active-minus-one", 0)) + 1,
+                    ):
+                        nal["luma-weight-l0-flag"][i] = buf.rb(1)
+                        if nal["luma-weight-l0-flag"][i]:
+                            nal["luma-weight-l0"][i] = buf.rse()
+                            nal["luma-offset-l0"][i] = buf.rse()
+                        if state.get("chroma-array-type", 0) != 0:
+                            nal["chroma-weight-l0-flag"][i] = buf.rb(1)
+                            if nal["chroma-weight-l0-flag"][i]:
+                                nal["chroma-weight-l0"][i] = {}
+                                nal["chroma-offset-l0"][i] = {}
+                                for j in range(0, 2):
+                                    nal["chroma-weight-l0"][i][j] = buf.rse()
+                                    nal["chroma-offset-l0"][i][j] = buf.rse()
+                    if nal["slice-type"] % 5 == 1:
+                        nal["luma-weight-l1-flag"] = {}
+                        nal["luma-weight-l1"] = {}
+                        nal["luma-offset-l1"] = {}
+                        nal["chroma-weight-l1-flag"] = {}
+                        nal["chroma-weight-l1"] = {}
+                        nal["chroma-offset-l1"] = {}
+                        for i in range(
+                            0,
+                            nal.get("num-ref-idx-l0-active-minus-one", state.get("num-ref-idx-l0-default-active-minus-one", 0))
+                            + 1,
+                        ):
+                            nal["luma-weight-l1-flag"][i] = buf.rb(1)
+                            if nal["luma-weight-l1-flag"][i]:
+                                nal["luma-weight-l1"][i] = buf.rse()
+                                nal["luma-offset-l1"][i] = buf.rse()
+                            if state.get("chroma-array-type", 0) != 0:
+                                nal["chroma-weight-l1-flag"][i] = buf.rb(1)
+                                if nal["chroma-weight-l1-flag"][i]:
+                                    nal["chroma-weight-l1"][i] = {}
+                                    nal["chroma-offset-l1"][i] = {}
+                                    for j in range(0, 2):
+                                        nal["chroma-weight-l1"][i][j] = buf.rse()
+                                        nal["chroma-offset-l1"][i][j] = buf.rse()
+
+                if nal["ref-idc"] != 0:
+                    if nal["unit-type"] == "Coded slice of an IDR picture":
+                        nal["no-output-of-prior-pics-flag"] = buf.rb(1)
+                        nal["long-term-reference-flag"] = buf.rb(1)
+                    else:
+                        nal["adaptive-ref-pic-marking-mode-flag"] = buf.rb(1)
+                        if nal["adaptive-ref-pic-marking-mode-flag"]:
+                            nal["memory-management-control-operation"] = []
+                            nal["difference-of-pic-nums-minus-one"] = {}
+                            nal["long-term-pic-num"] = {}
+                            nal["long-term-frame-idx"] = {}
+                            nal["max-long-term-frame-idx-plus-one"] = {}
+                            while True:
+                                nal["memory-management-control-operation"].append(buf.rue())
+                                if nal["memory-management-control-operation"][-1] in (1, 3):
+                                    nal["difference-of-pic-nums-minus-one"][
+                                        len(nal["memory-management-control-operation"]) - 1
+                                    ] = buf.rue()
+                                if nal["memory-management-control-operation"][-1] == 2:
+                                    nal["long-term-pic-num"][len(nal["memory-management-control-operation"]) - 1] = buf.rue()
+                                if nal["memory-management-control-operation"][-1] in (3, 6):
+                                    nal["long-term-frame-idx"][len(nal["memory-management-control-operation"]) - 1] = buf.rue()
+                                if nal["memory-management-control-operation"][-1] == 4:
+                                    nal["max-long-term-frame-idx-plus-one"][
+                                        len(nal["memory-management-control-operation"]) - 1
+                                    ] = buf.rue()
+                                if nal["memory-management-control-operation"][-1] == 0:
+                                    break
+
+                if state.get("entropy-coding-mode-flag", 0) and nal["slice-type"] % 5 not in (2, 4):
+                    nal["cabac-init-idc"] = buf.rue()
+
+                nal["slice-qp-delta"] = buf.rse()
+
+                if nal["slice-type"] % 5 in (3, 4):
+                    if nal["slice-type"] % 5 == 3:
+                        nal["sp-for-switch-flag"] = buf.rb(1)
+                    nal["slice-qs-delta"] = buf.rse()
+
+                if state.get("deblocking-filter-control-present-flag", 0):
+                    nal["disable-deblocking-filter-idc"] = buf.rue()
+                    if nal["disable-deblocking-filter-idc"] != 1:
+                        nal["slice-alpha-c0-offset-div2"] = buf.rse()
+                        nal["slice-beta-offset-div2"] = buf.rse()
+
+                if state.get("num-slice-groups-minus-one", 0) > 0 and 3 <= state.get("slice-group-map-type", 0) <= 5:
+                    nal["slice-group-change-cycle"] = buf.rb(
+                        math.ceil(
+                            math.log2(
+                                (
+                                    (
+                                        (state.get("pic-width-in-mbs-minus-one", 0) + 1)
+                                        * (state.get("pic-height-in-map-units-minus-one", 0) + 1)
+                                    )
+                                    / (state.get("slice-group-change-rate-minus-one", 0) + 1)
+                                )
+                                + 1
+                            )
+                        )
+                    )
 
                 buf.align()
             case "Supplemental enhancement information":
