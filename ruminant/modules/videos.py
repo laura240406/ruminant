@@ -404,6 +404,7 @@ class FFMpreg(object):
                         nal["low-delay-hrd-flag"] = buf.rb(1)
 
                     nal["pic-struct-present-flag"] = buf.rb(1)
+                    state["pic-struct-present-flag"] = nal["pic-struct-present-flag"]
                     nal["bitstream-restriction-flag"] = buf.rb(1)
 
                     if nal["bitstream-restriction-flag"]:
@@ -692,7 +693,9 @@ class FFMpreg(object):
                     if b != 0xff:
                         break
 
-                nal["type"] = utils.unraw(t, 1, {0x00: "buffering_period", 0x05: "user_data_unregistered"}, True)
+                nal["type"] = utils.unraw(
+                    t, 1, {0x00: "buffering_period", 0x01: "pic_timing", 0x05: "user_data_unregistered"}, True
+                )
                 nal["length"] = l
 
                 buf.pasunit(l)
@@ -721,9 +724,46 @@ class FFMpreg(object):
                         if state.get("vcl-hrd-parameters-present-flag"):
                             nal["vcl-initial-cpb-removal-delay-and-offset"] = [
                                 (buf.rb(v), buf.rb(v))
-                                for i in range(0, state.get("hrd-parameters", {}).get("cpb-cnt-minus-one", 0) + 1)
+                                for i in range(0, state.get("vcl-hrd-parameters", {}).get("cpb-cnt-minus-one", 0) + 1)
                             ]
+                    case "pic_timing":
+                        params = state.get("hrd-parameters", state.get("vcl-hrd-parameters", {}))
 
+                        if state.get("nal-hrd-parameters-present-flag") or state.get("vcl-hrd-parameters-present-flag"):
+                            nal["cpb-removal-delay"] = buf.rb(params.get("cpb-removal-delay-length-minus-one", 0) + 1)
+                            nal["dpb-output-delay"] = buf.rb(params.get("dpb-output-delay-length-minus-one", 0) + 1)
+                        if state.get("pic-struct-present-flag"):
+                            nal["pic-struct"] = buf.rb(4)
+                            nal["clock-ts"] = []
+                            for i in range({0: 1, 1: 1, 2: 1, 3: 2, 4: 2, 5: 3, 6: 3, 7: 2, 8: 3}[nal["pic-struct"]]):
+                                ts = {}
+                                ts["clock-timestamp-flag"] = buf.rb(1)
+                                if ts["clock-timestamp-flag"]:
+                                    ts["ct-type"] = buf.rb(2)
+                                    ts["nuit-field-based-flag"] = buf.rb(1)
+                                    ts["counting-type"] = buf.rb(5)
+                                    ts["full-timestamp-flag"] = buf.rb(1)
+                                    ts["discontinuity-flag"] = buf.rb(1)
+                                    ts["cnt-dropped-flag"] = buf.rb(1)
+                                    ts["n-frames"] = buf.rb(8)
+                                    if ts["full-timestamp-flag"]:
+                                        ts["seconds-value"] = buf.rb(6)
+                                        ts["minutes-value"] = buf.rb(6)
+                                        ts["hours-value"] = buf.rb(5)
+                                    else:
+                                        ts["seconds-flag"] = buf.rb(1)
+                                        if ts["seconds-flag"]:
+                                            ts["seconds-value"] = buf.rb(6)
+                                            ts["minutes-flag"] = buf.rb(1)
+                                            if ts["minutes-flag"]:
+                                                ts["minutes-value"] = buf.rb(6)
+                                                ts["hours-flag"] = buf.rb(1)
+                                                if ts["hours-flag"]:
+                                                    ts["hours-value"] = buf.rb(5)
+                                    if params.get("time-offset-length", 0) > 0:
+                                        ts["time-offset"] = buf.rb(params.get("time-offset-length", 0))
+
+                                nal["clock-ts"].append(ts)
                     case _:
                         nal["payload"] = buf.rh(buf.unit)
                         nal["unknown"] = True
