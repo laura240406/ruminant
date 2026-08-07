@@ -387,14 +387,18 @@ class FFMpreg(object):
                         nal["fixed-frame-rate-flag"] = buf.rb(1)
 
                     nal["nal-hrd-parameters-present-flag"] = buf.rb(1)
+                    state["nal-hrd-parameters-present-flag"] = nal["nal-hrd-parameters-present-flag"]
 
                     if nal["nal-hrd-parameters-present-flag"]:
                         nal["hrd-parameters"] = FFMpreg.read_h264_hrd_parameters(buf)
+                        state["hrd-parameters"] = nal["hrd-parameters"]
 
                     nal["vcl-hrd-parameters-present-flag"] = buf.rb(1)
+                    state["vcl-hrd-parameters-present-flag"] = nal["vcl-hrd-parameters-present-flag"]
 
                     if nal["vcl-hrd-parameters-present-flag"]:
                         nal["vcl-hrd-parameters"] = FFMpreg.read_h264_hrd_parameters(buf)
+                        state["vcl-hrd-parameters"] = nal["vcl-hrd-parameters"]
 
                     if nal["nal-hrd-parameters-present-flag"] or nal["vcl-hrd-parameters-present-flag"]:
                         nal["low-delay-hrd-flag"] = buf.rb(1)
@@ -703,9 +707,23 @@ class FFMpreg(object):
                             nal["h264-vaapi-banner"] = buf.rs(buf.unit)
                         else:
                             nal["payload"] = buf.rh(buf.unit)
-                    case "buffering_period ":
-                        # TODO
-                        pass
+                    case "buffering_period":
+                        nal["seq-parameter-set-id"] = buf.rue()
+
+                        v = state.get("hrd-parameters", {}).get("initial-cpb-removal-delay-length-minus-one", 0) + 1
+
+                        if state.get("nal-hrd-parameters-present-flag"):
+                            nal["nal-initial-cpb-removal-delay-and-offset"] = [
+                                (buf.rb(v), buf.rb(v))
+                                for i in range(0, state.get("hrd-parameters", {}).get("cpb-cnt-minus-one", 0) + 1)
+                            ]
+
+                        if state.get("vcl-hrd-parameters-present-flag"):
+                            nal["vcl-initial-cpb-removal-delay-and-offset"] = [
+                                (buf.rb(v), buf.rb(v))
+                                for i in range(0, state.get("hrd-parameters", {}).get("cpb-cnt-minus-one", 0) + 1)
+                            ]
+
                     case _:
                         nal["payload"] = buf.rh(buf.unit)
                         nal["unknown"] = True
