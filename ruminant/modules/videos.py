@@ -5671,3 +5671,38 @@ class DiracModule(module.RuminantModule):
             meta["units"].append(unit)
 
         return meta
+
+
+@module.register
+class JvtNalH264Module(module.RuminantModule):
+    desc = "Files containing raw H.264 NAL units."
+
+    @staticmethod
+    def identify(buf: Buf, ctx={}) -> bool:
+        with buf:
+            return buf.ru32() == 1 and buf.ru8() & 0x1f == 0x07
+
+    def chew(self) -> ruminant_types.JSON:
+        meta: dict = {}
+        meta["type"] = "jvt-nal-h264"
+
+        meta["nals"] = []
+        starts = []
+        while self.buf.available() > 4:
+            if self.buf.peek(4) == b"\x00\x00\x00\x01":
+                starts.append(self.buf.tell())
+                self.buf.skip(4)
+            else:
+                self.buf.skip(1)
+
+        starts.append(self.buf.tell())
+
+        for i in range(0, len(starts) - 1):
+            self.buf.seek(starts[i] + 4)
+            self.buf.pasunit(starts[i + 1] - starts[i] - 4)
+
+            meta["nals"].append(FFMpreg.read_h264_nalu(self.buf, slim=True))
+
+            self.buf.popunit()
+
+        return meta

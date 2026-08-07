@@ -131,6 +131,7 @@ Ruminant is still in early alpha but it can already process the following file t
 * EFI signature lists (like db or dbx)
 * qoi image files
 * AppleDouble files
+* H.264 JVT NAL sequence files
 
 # How do I install it?
 Run `pip3 install ruminant`.
