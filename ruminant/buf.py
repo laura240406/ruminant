@@ -719,7 +719,7 @@ class Buf(object):
 
     def rue(self):
         bits = 1
-        while self.pb(1) == 0:
+        while self.pb(1) == 0 and self.available() > 0:
             bits += 1
             self.rb(1)
 
