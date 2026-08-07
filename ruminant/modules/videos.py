@@ -709,6 +709,7 @@ class FFMpreg(object):
                             nal["uuid"] = buf.ruuid()
                             nal["h264-vaapi-banner"] = buf.rs(buf.unit)
                         else:
+                            nal["uuid"] = buf.ruuid()
                             nal["payload"] = buf.rh(buf.unit)
                     case "buffering_period":
                         nal["seq-parameter-set-id"] = buf.rue()
