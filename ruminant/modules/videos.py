@@ -389,12 +389,12 @@ class FFMpreg(object):
                     nal["nal-hrd-parameters-present-flag"] = buf.rb(1)
 
                     if nal["nal-hrd-parameters-present-flag"]:
-                        nal["hrd-parameters"] = FFMpreg.read_h264_hdr_parameters(buf)
+                        nal["hrd-parameters"] = FFMpreg.read_h264_hrd_parameters(buf)
 
                     nal["vcl-hrd-parameters-present-flag"] = buf.rb(1)
 
                     if nal["vcl-hrd-parameters-present-flag"]:
-                        nal["vcl-hrd-parameters"] = FFMpreg.read_h264_hdr_parameters(buf)
+                        nal["vcl-hrd-parameters"] = FFMpreg.read_h264_hrd_parameters(buf)
 
                     if nal["nal-hrd-parameters-present-flag"] or nal["vcl-hrd-parameters-present-flag"]:
                         nal["low-delay-hrd-flag"] = buf.rb(1)
