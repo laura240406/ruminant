@@ -688,21 +688,46 @@ class FFMpreg(object):
                     if b != 0xff:
                         break
 
-                nal["type"] = utils.unraw(t, 1, {0x05: "user_data_unregistered"}, True)
+                nal["type"] = utils.unraw(t, 1, {0x00: "buffering_period", 0x05: "user_data_unregistered"}, True)
                 nal["length"] = l
 
                 buf.pasunit(l)
 
-                if buf.peek(16).hex() == "dc45e9bde6d948b7962cd820d923eeef":
-                    nal["uuid"] = buf.ruuid()
-                    nal["libx264-banner"] = buf.rs(buf.unit)
-                elif buf.peek(16).hex() == "59948b2811ec45af967519d41feaa94d":
-                    nal["uuid"] = buf.ruuid()
-                    nal["h264-vaapi-banner"] = buf.rs(buf.unit)
-                else:
-                    nal["payload"] = buf.rh(buf.unit)
+                match nal["type"]:
+                    case "user_data_unregistered":
+                        if buf.peek(16).hex() == "dc45e9bde6d948b7962cd820d923eeef":
+                            nal["uuid"] = buf.ruuid()
+                            nal["libx264-banner"] = buf.rs(buf.unit)
+                        elif buf.peek(16).hex() == "59948b2811ec45af967519d41feaa94d":
+                            nal["uuid"] = buf.ruuid()
+                            nal["h264-vaapi-banner"] = buf.rs(buf.unit)
+                        else:
+                            nal["payload"] = buf.rh(buf.unit)
+                    case "buffering_period ":
+                        # TODO
+                        pass
+                    case _:
+                        nal["payload"] = buf.rh(buf.unit)
+                        nal["unknown"] = True
 
                 buf.sapunit()
+            case "Access unit delimiter":
+                nal["primary-pic-type"] = utils.unraw(
+                    buf.rb(3),
+                    1,
+                    {
+                        0x00: "2/7",
+                        0x01: "0/2/5/7",
+                        0x02: "0/1/2/5/6/7",
+                        0x03: "4/9",
+                        0x04: "3/4/8/9",
+                        0x05: "2/4/7/9",
+                        0x06: "0/2/3/4/5/7/8/9",
+                        0x07: "0/1/2/3/4/5/6/7/8/9",
+                    },
+                    True,
+                )
+                buf.align()
             case _:
                 if not slim:
                     nal["payload"] = buf.rh(buf.unit)
