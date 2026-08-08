@@ -1225,6 +1225,36 @@ class FFMpreg(object):
         return nal
 
     @staticmethod
+    def read_h265_scaling_list(buf: Buf) -> dict:
+        nal: dict = {}
+        nal["scaling-list-pred-mode-flag"] = [[0] * 6 for _ in range(4)]
+        nal["scaling-list-pred-matrix-id-delta"] = [[0] * 6 for _ in range(4)]
+        nal["scaling-list-dc-coef-minus8"] = [[0] * 6 for _ in range(2)]
+        nal["scaling-list-delta-coef"] = []
+        nal["scaling-list"] = [[[0] * 64 for _ in range(6)] for _ in range(4)]
+
+        for size_id in range(0, 4):
+            matrix_id = 0
+            while matrix_id < 6:
+                nal["scaling-list-pred-mode-flag"][size_id][matrix_id] = buf.rb(1)
+                if not nal["scaling-list-pred-mode-flag"][size_id][matrix_id]:
+                    nal["scaling-list-pred-matrix-id-delta"][size_id][matrix_id] = buf.rue()
+                else:
+                    next_coef = 8
+                    coef_num = min(64, 1 << (4 + (size_id << 1)))
+                    if size_id > 1:
+                        nal["scaling-list-dc-coef-minus8"][size_id - 2][matrix_id] = buf.rse()
+                        next_coef = nal["scaling-list-dc-coef-minus8"][size_id - 2][matrix_id] + 8
+                    for i in range(coef_num):
+                        delta = buf.rse()
+                        nal["scaling-list-delta-coef"].append(delta)
+                        next_coef = (next_coef + delta + 256) % 256
+                        nal["scaling-list"][size_id][matrix_id][i] = next_coef
+                matrix_id += 3 if size_id == 3 else 1
+
+        return nal
+
+    @staticmethod
     def read_h265_nalu(buf: Buf, state={}) -> dict:
         buf = Buf(buf.read(buf.unit).replace(b"\x00\x00\x03", b"\x00\x00"))
 
@@ -1403,29 +1433,7 @@ class FFMpreg(object):
                 if nal["scaling-list-enabled-flag"]:
                     nal["sps-scaling-list-data-present-flag"] = buf.rb(1)
                     if nal["sps-scaling-list-data-present-flag"]:
-                        nal["scaling-list-pred-mode-flag"] = [[0] * 6 for _ in range(4)]
-                        nal["scaling-list-pred-matrix-id-delta"] = [[0] * 6 for _ in range(4)]
-                        nal["scaling-list-dc-coef-minus8"] = [[0] * 6 for _ in range(2)]
-                        nal["scaling-list-delta-coef"] = []
-                        nal["scaling-list"] = [[[0] * 64 for _ in range(6)] for _ in range(4)]
-                        for size_id in range(0, 4):
-                            matrix_id = 0
-                            while matrix_id < 6:
-                                nal["scaling-list-pred-mode-flag"][size_id][matrix_id] = buf.rb(1)
-                                if not nal["scaling-list-pred-mode-flag"][size_id][matrix_id]:
-                                    nal["scaling-list-pred-matrix-id-delta"][size_id][matrix_id] = buf.rue()
-                                else:
-                                    next_coef = 8
-                                    coef_num = min(64, 1 << (4 + (size_id << 1)))
-                                    if size_id > 1:
-                                        nal["scaling-list-dc-coef-minus8"][size_id - 2][matrix_id] = buf.rse()
-                                        next_coef = nal["scaling-list-dc-coef-minus8"][size_id - 2][matrix_id] + 8
-                                    for i in range(coef_num):
-                                        delta = buf.rse()
-                                        nal["scaling-list-delta-coef"].append(delta)
-                                        next_coef = (next_coef + delta + 256) % 256
-                                        nal["scaling-list"][size_id][matrix_id][i] = next_coef
-                                matrix_id += 3 if size_id == 3 else 1
+                        nal["scaling-list"] = FFMpreg.read_h265_scaling_list(buf)
                 nal["amp-enabled-flag"] = buf.rb(1)
                 nal["sample-adaptive-offset-enabled-flag"] = buf.rb(1)
                 nal["pcm-enabled-flag"] = buf.rb(1)
@@ -1470,7 +1478,7 @@ class FFMpreg(object):
                         nal["used-by-curr-pic-flag"].append(used_by_curr)
                         nal["use-delta-flag"].append(use_delta)
                         num_delta_pocs[st_rps_idx] = sum(
-                            1 for k in range(num_delta_pocs[ref_rps_idx] + 1) if used_by_curr[k] or use_delta[k]
+                            1 for k in range(0, num_delta_pocs[ref_rps_idx] + 1) if used_by_curr[k] or use_delta[k]
                         )
                     else:
                         nal["num-negative-pics"][st_rps_idx] = buf.rue()
@@ -1478,7 +1486,7 @@ class FFMpreg(object):
                         num_delta_pocs[st_rps_idx] = nal["num-negative-pics"][st_rps_idx] + nal["num-positive-pics"][st_rps_idx]
                         d_poc_s0 = []
                         u_s0 = []
-                        for i in range(nal["num-negative-pics"][st_rps_idx]):
+                        for i in range(0, nal["num-negative-pics"][st_rps_idx]):
                             d_poc_s0.append(buf.rue())
                             u_s0.append(buf.rb(1))
                         nal["delta-poc-s0-minus-one"].append(d_poc_s0)
@@ -1572,6 +1580,175 @@ class FFMpreg(object):
                     nal["cabac-bypass-alignment-enabled-flag"] = buf.rb(1)
                 if nal.get("sps-multilayer-extension-flag"):
                     nal["inter-view-mv-vert-constraint-flag"] = buf.rb(1)
+            case "PPS_NUT":
+                nal["pps-pic-parameter-set-id"] = buf.rue()
+                nal["pps-seq-parameter-set-id"] = buf.rue()
+                nal["dependent-slice-segments-enabled-flag"] = buf.rb(1)
+                nal["output-flag-present-flag"] = buf.rb(1)
+                nal["num-extra-slice-header-bits"] = buf.rb(3)
+                nal["sign-data-hiding-enabled-flag"] = buf.rb(1)
+                nal["cabac-init-present-flag"] = buf.rb(1)
+                nal["num-ref-idx-l0-default-active-minus-one"] = buf.rue()
+                nal["num-ref-idx-l1-default-active-minus-one"] = buf.rue()
+                nal["init-qp-minus26"] = buf.rse()
+                nal["constrained-intra-pred-flag"] = buf.rb(1)
+                nal["transform-skip-enabled-flag"] = buf.rb(1)
+                nal["cu-qp-delta-enabled-flag"] = buf.rb(1)
+                if nal["cu-qp-delta-enabled-flag"]:
+                    nal["diff-cu-qp-delta-depth"] = buf.rue()
+                nal["pps-cb-qp-offset"] = buf.rse()
+                nal["pps-cr-qp-offset"] = buf.rse()
+                nal["pps-slice-chroma-qp-offsets-present-flag"] = buf.rb(1)
+                nal["weighted-pred-flag"] = buf.rb(1)
+                nal["weighted-bipred-flag"] = buf.rb(1)
+                nal["transquant-bypass-enabled-flag"] = buf.rb(1)
+                nal["tiles-enabled-flag"] = buf.rb(1)
+                nal["entropy-coding-sync-enabled-flag"] = buf.rb(1)
+                if nal["tiles-enabled-flag"]:
+                    nal["num-tile-columns-minus-one"] = buf.rue()
+                    nal["num-tile-rows-minus-one"] = buf.rue()
+                    nal["uniform-spacing-flag"] = buf.rb(1)
+                    if not nal["uniform-spacing-flag"]:
+                        nal["column-width-minus-one"] = [buf.rue() for i in range(0, nal["num-tile-columns-minus-one"])]
+                        nal["row-height-minus-one"] = [buf.rue() for i in range(0, nal["num-tile-rows-minus-one"])]
+                    nal["loop-filter-across-tiles-enabled-flag"] = buf.rb(1)
+                nal["pps-loop-filter-across-slices-enabled-flag"] = buf.rb(1)
+                nal["deblocking-filter-control-present-flag"] = buf.rb(1)
+                if nal["deblocking-filter-control-present-flag"]:
+                    nal["deblocking-filter-override-enabled-flag"] = buf.rb(1)
+                    nal["pps-deblocking-filter-disabled-flag"] = buf.rb(1)
+                    if not nal["pps-deblocking-filter-disabled-flag"]:
+                        nal["pps-beta-offset-div2"] = buf.rse()
+                        nal["pps-tc-offset-div2"] = buf.rse()
+                nal["pps-scaling-list-data-present-flag"] = buf.rb(1)
+                if nal["pps-scaling-list-data-present-flag"]:
+                    nal["scaling-list-data"] = FFMpreg.read_h265_scaling_list(buf)
+                nal["lists-modification-present-flag"] = buf.rb(1)
+                nal["log2-parallel-merge-level-minus2"] = buf.rue()
+                nal["slice-segment-header-extension-present-flag"] = buf.rb(1)
+                nal["pps-extension-present-flag"] = buf.rb(1)
+                if nal["pps-extension-present-flag"]:
+                    nal["pps-range-extension-flag"] = buf.rb(1)
+                    nal["pps-multilayer-extension-flag"] = buf.rb(1)
+                    nal["pps-extension-6bits"] = buf.rb(6)
+                if nal.get("pps-range-extension-flag"):
+                    if nal["transform-skip-enabled-flag"]:
+                        nal["log2-max-transform-skip-block-size-minus2"] = buf.rue()
+                    nal["cross-component-prediction-enabled-flag"] = buf.rb(1)
+                    nal["chroma-qp-offset-list-enabled-flag"] = buf.rb(1)
+                    if nal["chroma-qp-offset-list-enabled-flag"]:
+                        nal["diff-cu-chroma-qp-offset-depth"] = buf.rue()
+                        nal["chroma-qp-offset-list-len-minus-one"] = buf.rue()
+                        nal["cb-qp-offset-list"] = []
+                        nal["cr-qp-offset-list"] = []
+                        for i in range(0, nal["chroma-qp-offset-list-len-minus-one"] + 1):
+                            nal["cb-qp-offset-list"].append(buf.rse())
+                            nal["cr-qp-offset-list"].append(buf.rse())
+                    nal["log2-sao-offset-scale-luma"] = buf.rue()
+                    nal["log2-sao-offset-scale-chroma"] = buf.rue()
+                if nal.get("pps-multilayer-extension-flag"):
+                    nal["poc-reset-info-present-flag"] = buf.rb(1)
+                    nal["pps-infer-scaling-list-flag"] = buf.rb(1)
+                    if nal["pps-infer-scaling-list-flag"]:
+                        nal["pps-scaling-list-ref-layer-id"] = buf.rb(6)
+                    nal["num-ref-loc-offsets"] = buf.rue()
+                    nal["ref-loc-offset-layer-id"] = []
+                    nal["scaled-ref-layer-offset-present-flag"] = []
+                    nal["scaled-ref-layer-left-offset"] = {}
+                    nal["scaled-ref-layer-top-offset"] = {}
+                    nal["scaled-ref-layer-right-offset"] = {}
+                    nal["scaled-ref-layer-bottom-offset"] = {}
+                    nal["ref-region-offset-present-flag"] = []
+                    nal["ref-region-left-offset"] = {}
+                    nal["ref-region-top-offset"] = {}
+                    nal["ref-region-right-offset"] = {}
+                    nal["ref-region-bottom-offset"] = {}
+                    nal["resample-phase-set-present-flag"] = []
+                    nal["phase-hor-luma"] = {}
+                    nal["phase-ver-luma"] = {}
+                    nal["phase-hor-chroma-plus8"] = {}
+                    nal["phase-ver-chroma-plus8"] = {}
+                    for i in range(0, nal["num-ref-loc-offsets"]):
+                        nal["ref-loc-offset-layer-id"].append(buf.rb(6))
+                        nal["scaled-ref-layer-offset-present-flag"].append(buf.rb(1))
+                        if nal["scaled-ref-layer-offset-present-flag"][i]:
+                            nal["scaled-ref-layer-left-offset"][nal["ref-loc-offset-layer-id"][i]] = buf.rse()
+                            nal["scaled-ref-layer-top-offset"][nal["ref-loc-offset-layer-id"][i]] = buf.rse()
+                            nal["scaled-ref-layer-right-offset"][nal["ref-loc-offset-layer-id"][i]] = buf.rse()
+                            nal["scaled-ref-layer-bottom-offset"][nal["ref-loc-offset-layer-id"][i]] = buf.rse()
+                        nal["ref-region-offset-present-flag"].append(buf.rb(1))
+                        if nal["ref-region-offset-present-flag"][i]:
+                            nal["ref-region-left-offset"][nal["ref-loc-offset-layer-id"][i]] = buf.rse()
+                            nal["ref-region-top-offset"][nal["ref-loc-offset-layer-id"][i]] = buf.rse()
+                            nal["ref-region-right-offset"][nal["ref-loc-offset-layer-id"][i]] = buf.rse()
+                            nal["ref-region-bottom-offset"][nal["ref-loc-offset-layer-id"][i]] = buf.rse()
+                        nal["resample-phase-set-present-flag"].append(buf.rb(1))
+                        if nal["resample-phase-set-present-flag"][i]:
+                            nal["phase-hor-luma"][nal["ref-loc-offset-layer-id"][i]] = buf.rue()
+                            nal["phase-ver-luma"][nal["ref-loc-offset-layer-id"][i]] = buf.rue()
+                            nal["phase-hor-chroma-plus8"][nal["ref-loc-offset-layer-id"][i]] = buf.rue()
+                            nal["phase-ver-chroma-plus8"][nal["ref-loc-offset-layer-id"][i]] = buf.rue()
+                    nal["colour-mapping-enabled-flag"] = buf.rb(1)
+                    if nal["colour-mapping-enabled-flag"]:
+                        nal["num-cm-ref-layers-minus-one"] = buf.rue()
+                        nal["cm-ref-layer-id"] = [buf.rb(6) for i in range(0, nal["num-cm-ref-layers-minus-one"] + 1)]
+                        nal["cm-octant-depth"] = buf.rb(2)
+                        nal["cm-y-part-num-log2"] = buf.rb(2)
+                        nal["luma-bit-depth-cm-input-minus8"] = buf.rue()
+                        nal["chroma-bit-depth-cm-input-minus8"] = buf.rue()
+                        nal["luma-bit-depth-cm-output-minus8"] = buf.rue()
+                        nal["chroma-bit-depth-cm-output-minus8"] = buf.rue()
+                        nal["cm-res-quant-bits"] = buf.rb(2)
+                        nal["cm-delta-flc-bits-minus-one"] = buf.rb(2)
+                        if nal["cm-octant-depth"] == 1:
+                            nal["cm-adapt-threshold-u-delta"] = buf.rse()
+                            nal["cm-adapt-threshold-v-delta"] = buf.rse()
+                        stack = [(0, 0, 0, 0, 1 << nal["cm-octant-depth"])]
+                        nal["split-octant-flag"] = []
+                        nal["coded-res-flag"] = {}
+                        nal["res-coeff-q"] = {}
+                        nal["res-coeff-r"] = {}
+                        nal["res-coeff-s"] = {}
+                        while stack:
+                            inp_depth, idx_y, idx_cb, idx_cr, inp_length = stack.pop()
+                            split_flag = 0
+                            if inp_depth < nal["cm-octant-depth"]:
+                                split_flag = buf.rb(1)
+                                nal["split-octant-flag"].append(split_flag)
+                            if split_flag:
+                                for k in range(1, -1, -1):
+                                    for m in range(1, -1, -1):
+                                        for n in range(1, -1, -1):
+                                            stack.append((
+                                                inp_depth + 1,
+                                                idx_y + (1 << nal["cm-y-part-num-log2"]) * k * (inp_length // 2),
+                                                idx_cb + m * (inp_length // 2),
+                                                idx_cr + n * (inp_length // 2),
+                                                inp_length // 2,
+                                            ))
+                            else:
+                                for i in range(0, 1 << nal["cm-y-part-num-log2"]):
+                                    idx_shift_y = idx_y + (i << (nal["cm-octant-depth"] - inp_depth))
+                                    for j in range(0, 4):
+                                        coded_res = buf.rb(1)
+                                        nal["coded-res-flag"].setdefault(idx_shift_y, {}).setdefault(idx_cb, {}).setdefault(
+                                            idx_cr, {}
+                                        )[j] = coded_res
+                                        if coded_res:
+                                            for c in range(0, 3):
+                                                q_val = buf.rue()
+                                                r_val = buf.rb(nal["cm-res-quant-bits"])
+                                                nal["res-coeff-q"].setdefault(idx_shift_y, {}).setdefault(
+                                                    idx_cb, {}
+                                                ).setdefault(idx_cr, {}).setdefault(j, {})[c] = q_val
+                                                nal["res-coeff-r"].setdefault(idx_shift_y, {}).setdefault(
+                                                    idx_cb, {}
+                                                ).setdefault(idx_cr, {}).setdefault(j, {})[c] = r_val
+                                                if q_val or r_val:
+                                                    nal["res-coeff-s"].setdefault(idx_shift_y, {}).setdefault(
+                                                        idx_cb, {}
+                                                    ).setdefault(idx_cr, {}).setdefault(j, {})[c] = buf.rb(1)
+
             case _:
                 nal["unknown"] = True
 
