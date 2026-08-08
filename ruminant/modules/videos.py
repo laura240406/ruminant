@@ -705,15 +705,18 @@ class FFMpreg(object):
 
                 match nal["type"]:
                     case "user_data_unregistered":
-                        if buf.peek(16).hex() == "dc45e9bde6d948b7962cd820d923eeef":
-                            nal["uuid"] = buf.ruuid()
-                            nal["libx264-banner"] = buf.rs(buf.unit)
-                        elif buf.peek(16).hex() == "59948b2811ec45af967519d41feaa94d":
-                            nal["uuid"] = buf.ruuid()
-                            nal["h264-vaapi-banner"] = buf.rs(buf.unit)
-                        else:
-                            nal["uuid"] = buf.ruuid()
-                            nal["payload"] = buf.rh(buf.unit)
+                        nal["uuid"] = buf.ruuid()
+
+                        match nal["uuid"]:
+                            case "dc45e9bd-e6d9-48b7-962c-d820d923eeef":
+                                nal["libx264-banner"] = buf.rs(buf.unit)
+                            case "59948b28-11ec-45af-9675-19d41feaa94d":
+                                nal["h264-vaapi-banner"] = buf.rs(buf.unit)
+                            case "a4dcf53f-130a-291c-9bd6-1ac002e6bdab":
+                                nal["string"] = buf.rs(buf.unit)
+                            case _:
+                                nal["payload"] = buf.rh(buf.unit)
+                                nal["unknown"] = True
                     case "buffering_period":
                         nal["seq-parameter-set-id"] = buf.rue()
 
