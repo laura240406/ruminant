@@ -239,14 +239,7 @@ class FFMpreg(object):
 
     @staticmethod
     def read_h264_nalu(buf: Buf, slim=False, state={}) -> dict:
-        buf = Buf(
-            buf
-            .read(buf.unit)
-            .replace(b"\x00\x00\x03\x00", b"\x00\x00\x00")
-            .replace(b"\x00\x00\x03\x01", b"\x00\x00\x01")
-            .replace(b"\x00\x00\x03\x02", b"\x00\x00\x02")
-            .replace(b"\x00\x00\x03\x03", b"\x00\x00\x03")
-        )
+        buf = Buf(buf.read(buf.unit).replace(b"\x00\x00\x03", b"\x00\x00"))
 
         nal = {}
         nal["length"] = buf.available()
@@ -1233,14 +1226,7 @@ class FFMpreg(object):
 
     @staticmethod
     def read_h265_nalu(buf: Buf, state={}) -> dict:
-        buf = Buf(
-            buf
-            .read(buf.unit)
-            .replace(b"\x00\x00\x03\x00", b"\x00\x00\x00")
-            .replace(b"\x00\x00\x03\x01", b"\x00\x00\x01")
-            .replace(b"\x00\x00\x03\x02", b"\x00\x00\x02")
-            .replace(b"\x00\x00\x03\x03", b"\x00\x00\x03")
-        )
+        buf = Buf(buf.read(buf.unit).replace(b"\x00\x00\x03", b"\x00\x00"))
 
         nal = {}
         nal["length"] = buf.available()
@@ -1376,6 +1362,216 @@ class FFMpreg(object):
                     nal["extension-data-flag"] = i >> 1
 
                 buf.align()
+            case "SPS_NUT":
+                nal["sps-video-parameter-set-id"] = buf.rb(4)
+                nal["sps-max-sub-layers-minus-one"] = buf.rb(3)
+                nal["sps-temporal-id-nesting-flag"] = buf.rb(1)
+                nal["profile-tier-level"] = FFMpreg.read_h265_profile_tier_level(buf, 1, nal["sps-max-sub-layers-minus-one"])
+                nal["sps-seq-parameter-set-id"] = buf.rue()
+                nal["chroma-format-idc"] = buf.rue()
+                if nal["chroma-format-idc"] == 3:
+                    nal["separate-colour-plane-flag"] = buf.rb(1)
+                nal["pic-width-in-luma-samples"] = buf.rue()
+                nal["pic-height-in-luma-samples"] = buf.rue()
+                nal["conformance-window-flag"] = buf.rb(1)
+                if nal["conformance-window-flag"]:
+                    nal["conf-win-left-offset"] = buf.rue()
+                    nal["conf-win-right-offset"] = buf.rue()
+                    nal["conf-win-top-offset"] = buf.rue()
+                    nal["conf-win-bottom-offset"] = buf.rue()
+                nal["bit-depth-luma-minus8"] = buf.rue()
+                nal["bit-depth-chroma-minus8"] = buf.rue()
+                nal["log2-max-pic-order-cnt-lsb-minus4"] = buf.rue()
+                nal["sps-sub-layer-ordering-info-present-flag"] = buf.rb(1)
+                nal["sps-max-dec-pic-buffering-minus-one"] = [0] * (nal["sps-max-sub-layers-minus-one"] + 1)
+                nal["sps-max-num-reorder-pics"] = [0] * (nal["sps-max-sub-layers-minus-one"] + 1)
+                nal["sps-max-latency-increase-plus1"] = [0] * (nal["sps-max-sub-layers-minus-one"] + 1)
+                for i in range(
+                    0 if nal["sps-sub-layer-ordering-info-present-flag"] else nal["sps-max-sub-layers-minus-one"],
+                    nal["sps-max-sub-layers-minus-one"] + 1,
+                ):
+                    nal["sps-max-dec-pic-buffering-minus-one"][i] = buf.rue()
+                    nal["sps-max-num-reorder-pics"][i] = buf.rue()
+                    nal["sps-max-latency-increase-plus1"][i] = buf.rue()
+                nal["log2-min-luma-coding-block-size-minus3"] = buf.rue()
+                nal["log2-diff-max-min-luma-coding-block-size"] = buf.rue()
+                nal["log2-min-luma-transform-block-size-minus2"] = buf.rue()
+                nal["log2-diff-max-min-luma-transform-block-size"] = buf.rue()
+                nal["max-transform-hierarchy-depth-inter"] = buf.rue()
+                nal["max-transform-hierarchy-depth-intra"] = buf.rue()
+                nal["scaling-list-enabled-flag"] = buf.rb(1)
+                if nal["scaling-list-enabled-flag"]:
+                    nal["sps-scaling-list-data-present-flag"] = buf.rb(1)
+                    if nal["sps-scaling-list-data-present-flag"]:
+                        nal["scaling-list-pred-mode-flag"] = [[0] * 6 for _ in range(4)]
+                        nal["scaling-list-pred-matrix-id-delta"] = [[0] * 6 for _ in range(4)]
+                        nal["scaling-list-dc-coef-minus8"] = [[0] * 6 for _ in range(2)]
+                        nal["scaling-list-delta-coef"] = []
+                        nal["scaling-list"] = [[[0] * 64 for _ in range(6)] for _ in range(4)]
+                        for size_id in range(0, 4):
+                            matrix_id = 0
+                            while matrix_id < 6:
+                                nal["scaling-list-pred-mode-flag"][size_id][matrix_id] = buf.rb(1)
+                                if not nal["scaling-list-pred-mode-flag"][size_id][matrix_id]:
+                                    nal["scaling-list-pred-matrix-id-delta"][size_id][matrix_id] = buf.rue()
+                                else:
+                                    next_coef = 8
+                                    coef_num = min(64, 1 << (4 + (size_id << 1)))
+                                    if size_id > 1:
+                                        nal["scaling-list-dc-coef-minus8"][size_id - 2][matrix_id] = buf.rse()
+                                        next_coef = nal["scaling-list-dc-coef-minus8"][size_id - 2][matrix_id] + 8
+                                    for i in range(coef_num):
+                                        delta = buf.rse()
+                                        nal["scaling-list-delta-coef"].append(delta)
+                                        next_coef = (next_coef + delta + 256) % 256
+                                        nal["scaling-list"][size_id][matrix_id][i] = next_coef
+                                matrix_id += 3 if size_id == 3 else 1
+                nal["amp-enabled-flag"] = buf.rb(1)
+                nal["sample-adaptive-offset-enabled-flag"] = buf.rb(1)
+                nal["pcm-enabled-flag"] = buf.rb(1)
+                if nal["pcm-enabled-flag"]:
+                    nal["pcm-sample-bit-depth-luma-minus-one"] = buf.rb(4)
+                    nal["pcm-sample-bit-depth-chroma-minus-one"] = buf.rb(4)
+                    nal["log2-min-pcm-luma-coding-block-size-minus3"] = buf.rue()
+                    nal["log2-diff-max-min-pcm-luma-coding-block-size"] = buf.rue()
+                    nal["pcm-loop-filter-disabled-flag"] = buf.rb(1)
+                nal["num-short-term-ref-pic-sets"] = buf.rue()
+                nal["inter-ref-pic-set-prediction-flag"] = [0] * nal["num-short-term-ref-pic-sets"]
+                nal["delta-idx-minus-one"] = [0] * (nal["num-short-term-ref-pic-sets"] + 1)
+                nal["delta-rps-sign"] = [0] * nal["num-short-term-ref-pic-sets"]
+                nal["abs-delta-rps-minus-one"] = [0] * nal["num-short-term-ref-pic-sets"]
+                nal["used-by-curr-pic-flag"] = []
+                nal["use-delta-flag"] = []
+                nal["num-negative-pics"] = [0] * nal["num-short-term-ref-pic-sets"]
+                nal["num-positive-pics"] = [0] * nal["num-short-term-ref-pic-sets"]
+                nal["delta-poc-s0-minus-one"] = []
+                nal["used-by-curr-pic-s0-flag"] = []
+                nal["delta-poc-s1-minus-one"] = []
+                nal["used-by-curr-pic-s1-flag"] = []
+                num_delta_pocs = [0] * nal["num-short-term-ref-pic-sets"]
+                for st_rps_idx in range(0, nal["num-short-term-ref-pic-sets"]):
+                    if st_rps_idx != 0:
+                        nal["inter-ref-pic-set-prediction-flag"][st_rps_idx] = buf.rb(1)
+                    if nal["inter-ref-pic-set-prediction-flag"][st_rps_idx]:
+                        if st_rps_idx == nal["num-short-term-ref-pic-sets"]:
+                            nal["delta-idx-minus-one"][st_rps_idx] = buf.rue()
+                        ref_rps_idx = st_rps_idx - (nal["delta-idx-minus-one"][st_rps_idx] + 1)
+                        nal["delta-rps-sign"][st_rps_idx] = buf.rb(1)
+                        nal["abs-delta-rps-minus-one"][st_rps_idx] = buf.rue()
+                        used_by_curr = []
+                        use_delta = []
+                        for j in range(0, num_delta_pocs[ref_rps_idx] + 1):
+                            u_curr = buf.rb(1)
+                            used_by_curr.append(u_curr)
+                            u_delta = 0
+                            if not u_curr:
+                                u_delta = buf.rb(1)
+                            use_delta.append(u_delta)
+                        nal["used-by-curr-pic-flag"].append(used_by_curr)
+                        nal["use-delta-flag"].append(use_delta)
+                        num_delta_pocs[st_rps_idx] = sum(
+                            1 for k in range(num_delta_pocs[ref_rps_idx] + 1) if used_by_curr[k] or use_delta[k]
+                        )
+                    else:
+                        nal["num-negative-pics"][st_rps_idx] = buf.rue()
+                        nal["num-positive-pics"][st_rps_idx] = buf.rue()
+                        num_delta_pocs[st_rps_idx] = nal["num-negative-pics"][st_rps_idx] + nal["num-positive-pics"][st_rps_idx]
+                        d_poc_s0 = []
+                        u_s0 = []
+                        for i in range(nal["num-negative-pics"][st_rps_idx]):
+                            d_poc_s0.append(buf.rue())
+                            u_s0.append(buf.rb(1))
+                        nal["delta-poc-s0-minus-one"].append(d_poc_s0)
+                        nal["used-by-curr-pic-s0-flag"].append(u_s0)
+                        d_poc_s1 = []
+                        u_s1 = []
+                        for i in range(0, nal["num-positive-pics"][st_rps_idx]):
+                            d_poc_s1.append(buf.rue())
+                            u_s1.append(buf.rb(1))
+                        nal["delta-poc-s1-minus-one"].append(d_poc_s1)
+                        nal["used-by-curr-pic-s1-flag"].append(u_s1)
+                nal["long-term-ref-pics-present-flag"] = buf.rb(1)
+                if nal["long-term-ref-pics-present-flag"]:
+                    nal["num-long-term-ref-pics-sps"] = buf.rue()
+                    nal["lt-ref-pic-poc-lsb-sps"] = [0] * nal["num-long-term-ref-pics-sps"]
+                    nal["used-by-curr-pic-lt-sps-flag"] = [0] * nal["num-long-term-ref-pics-sps"]
+                    for i in range(0, nal["num-long-term-ref-pics-sps"]):
+                        nal["lt-ref-pic-poc-lsb-sps"][i] = buf.rb(nal["log2-max-pic-order-cnt-lsb-minus4"] + 4)
+                        nal["used-by-curr-pic-lt-sps-flag"][i] = buf.rb(1)
+                nal["sps-temporal-mvp-enabled-flag"] = buf.rb(1)
+                nal["strong-intra-smoothing-enabled-flag"] = buf.rb(1)
+                nal["vui-parameters-present-flag"] = buf.rb(1)
+                if nal["vui-parameters-present-flag"]:
+                    nal["aspect-ratio-info-present-flag"] = buf.rb(1)
+                    if nal["aspect-ratio-info-present-flag"]:
+                        nal["aspect-ratio-idc"] = buf.rb(8)
+                        if nal["aspect-ratio-idc"] == 255:
+                            nal["sar-width"] = buf.rb(16)
+                            nal["sar-height"] = buf.rb(16)
+                    nal["overscan-info-present-flag"] = buf.rb(1)
+                    if nal["overscan-info-present-flag"]:
+                        nal["overscan-appropriate-flag"] = buf.rb(1)
+                    nal["video-signal-type-present-flag"] = buf.rb(1)
+                    if nal["video-signal-type-present-flag"]:
+                        nal["video-format"] = buf.rb(3)
+                        nal["video-full-range-flag"] = buf.rb(1)
+                        nal["colour-description-present-flag"] = buf.rb(1)
+                        if nal["colour-description-present-flag"]:
+                            nal["colour-primaries"] = buf.rb(8)
+                            nal["transfer-characteristics"] = buf.rb(8)
+                            nal["matrix-coeffs"] = buf.rb(8)
+                    nal["chroma-loc-info-present-flag"] = buf.rb(1)
+                    if nal["chroma-loc-info-present-flag"]:
+                        nal["chroma-sample-loc-type-top-field"] = buf.rue()
+                        nal["chroma-sample-loc-type-bottom-field"] = buf.rue()
+                    nal["neutral-chroma-indication-flag"] = buf.rb(1)
+                    nal["field-seq-flag"] = buf.rb(1)
+                    nal["frame-field-info-present-flag"] = buf.rb(1)
+                    nal["default-display-window-flag"] = buf.rb(1)
+                    if nal["default-display-window-flag"]:
+                        nal["def-disp-win-left-offset"] = buf.rue()
+                        nal["def-disp-win-right-offset"] = buf.rue()
+                        nal["def-disp-win-top-offset"] = buf.rue()
+                        nal["def-disp-win-bottom-offset"] = buf.rue()
+                    nal["vui-timing-info-present-flag"] = buf.rb(1)
+                    if nal["vui-timing-info-present-flag"]:
+                        nal["vui-num-units-in-tick"] = buf.rb(32)
+                        nal["vui-time-scale"] = buf.rb(32)
+                        nal["vui-poc-proportional-to-timing-flag"] = buf.rb(1)
+                        if nal["vui-poc-proportional-to-timing-flag"]:
+                            nal["vui-num-ticks-poc-diff-one-minus-one"] = buf.rue()
+                        nal["vui-hrd-parameters-present-flag"] = buf.rb(1)
+                        if nal["vui-hrd-parameters-present-flag"]:
+                            nal["vui-hrd-parameters"] = FFMpreg.read_h265_hrd_parameters(
+                                buf, 1, nal["sps-max-sub-layers-minus-one"]
+                            )
+                    nal["bitstream-restriction-flag"] = buf.rb(1)
+                    if nal["bitstream-restriction-flag"]:
+                        nal["tiles-fixed-structure-flag"] = buf.rb(1)
+                        nal["motion-vectors-over-pic-boundaries-flag"] = buf.rb(1)
+                        nal["restricted-ref-pic-lists-flag"] = buf.rb(1)
+                        nal["min-spatial-segmentation-idc"] = buf.rue()
+                        nal["max-bytes-per-pic-denom"] = buf.rue()
+                        nal["max-bits-per-min-cu-denom"] = buf.rue()
+                        nal["log2-max-mv-length-horizontal"] = buf.rue()
+                        nal["log2-max-mv-length-vertical"] = buf.rue()
+                nal["sps-extension-present-flag"] = buf.rb(1)
+                if nal["sps-extension-present-flag"]:
+                    nal["sps-range-extension-flag"] = buf.rb(1)
+                    nal["sps-multilayer-extension-flag"] = buf.rb(1)
+                    nal["sps-extension-6bits"] = buf.rb(6)
+                if nal.get("sps-range-extension-flag"):
+                    nal["transform-skip-rotation-enabled-flag"] = buf.rb(1)
+                    nal["transform-skip-context-enabled-flag"] = buf.rb(1)
+                    nal["implicit-rdpcm-enabled-flag"] = buf.rb(1)
+                    nal["explicit-rdpcm-enabled-flag"] = buf.rb(1)
+                    nal["extended-precision-processing-flag"] = buf.rb(1)
+                    nal["intra-smoothing-disabled-flag"] = buf.rb(1)
+                    nal["high-precision-offsets-enabled-flag"] = buf.rb(1)
+                    nal["persistent-rice-adaptation-enabled-flag"] = buf.rb(1)
+                    nal["cabac-bypass-alignment-enabled-flag"] = buf.rb(1)
+                if nal.get("sps-multilayer-extension-flag"):
+                    nal["inter-view-mv-vert-constraint-flag"] = buf.rb(1)
             case _:
                 nal["unknown"] = True
 
