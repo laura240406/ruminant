@@ -5756,20 +5756,27 @@ class DuckIvfModule(module.RuminantModule):
 
         match meta["format"]:
             case "AV01":
-                with self.buf:
+                ranges: list[int] = utils.expand_ranges(secrets.get_parameter("0", meta, "ranges"), 0, meta["frame-count"] - 1)
+
+                meta["samples"] = {}
+                for i in range(0, meta["frame-count"]):
                     length = self.buf.ru32l()
                     self.buf.skip(8)
 
-                    self.buf.pasunit(length)
+                    if i in ranges:
+                        self.buf.pasunit(length)
 
-                    meta["first-sample-obus"] = []
-                    while self.buf.hasunit():
-                        meta["first-sample-obus"].append(FFMpreg.read_av1_obu(self.buf))
+                        meta["samples"][i] = []
+                        while self.buf.hasunit():
+                            meta["samples"][i].append(FFMpreg.read_av1_obu(self.buf))
 
-                    self.buf.sapunit()
-
-        for i in range(0, meta["frame-count"]):
-            self.buf.skip(self.buf.ru32l() + 8)
+                        self.buf.sapunit()
+                    else:
+                        self.buf.skip(length)
+            case _:
+                meta["unknown"] = True
+                for i in range(0, meta["frame-count"]):
+                    self.buf.skip(self.buf.ru32l() + 8)
 
         return meta
 
