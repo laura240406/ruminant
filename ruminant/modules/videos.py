@@ -301,14 +301,14 @@ class FFMpreg(object):
 
                             nal["seq-scaling-matrices"].append(matrix)
 
-                nal["log2-max-frame-num-minus4"] = buf.rue()
-                state["log2-max-frame-num-minus4"] = nal["log2-max-frame-num-minus4"]
+                nal["log2-max-frame-num-minus-four"] = buf.rue()
+                state["log2-max-frame-num-minus-four"] = nal["log2-max-frame-num-minus-four"]
                 nal["pic-order-cnt-type"] = buf.rue()
                 state["pic-order-cnt-type"] = nal["pic-order-cnt-type"]
 
                 if nal["pic-order-cnt-type"] == 0:
-                    nal["log2-max-pic-order-cnt-lsb-minus4"] = buf.rue()
-                    state["log2-max-pic-order-cnt-lsb-minus4"] = nal["log2-max-pic-order-cnt-lsb-minus4"]
+                    nal["log2-max-pic-order-cnt-lsb-minus-four"] = buf.rue()
+                    state["log2-max-pic-order-cnt-lsb-minus-four"] = nal["log2-max-pic-order-cnt-lsb-minus-four"]
                 elif nal["pic-order-cnt-type"] == 1:
                     nal["delta-pic-order-always-zero-flag"] = buf.rb(1)
                     state["delta-pic-order-always-zero-flag"] = nal["delta-pic-order-always-zero-flag"]
@@ -487,7 +487,7 @@ class FFMpreg(object):
                 if state.get("separate-colour-plane-flag"):
                     nal["colour-plane-id"] = buf.rb(2)
 
-                nal["frame-num"] = buf.rb(state.get("log2-max-frame-num-minus4", 0) + 4)
+                nal["frame-num"] = buf.rb(state.get("log2-max-frame-num-minus-four", 0) + 4)
 
                 if not state.get("frame-mbs-only-flag"):
                     nal["field-pic-flag"] = buf.rb(1)
@@ -500,7 +500,7 @@ class FFMpreg(object):
 
                 temp = state.get("pic-order-cnt-type", 0)
                 if temp == 0:
-                    nal["pic-order-cnt-lsb"] = buf.rb(state.get("log2-max-pic-order-cnt-lsb-minus4", 0) + 4)
+                    nal["pic-order-cnt-lsb"] = buf.rb(state.get("log2-max-pic-order-cnt-lsb-minus-four", 0) + 4)
 
                     if state.get("bottom-field-pic-order-in-frame-present-flag") and not nal.get("field-pic-flag"):
                         nal["delta-pic-order-cnt-bottom"] = buf.rse()
@@ -1229,7 +1229,7 @@ class FFMpreg(object):
         nal: dict = {}
         nal["scaling-list-pred-mode-flag"] = [[0] * 6 for _ in range(4)]
         nal["scaling-list-pred-matrix-id-delta"] = [[0] * 6 for _ in range(4)]
-        nal["scaling-list-dc-coef-minus8"] = [[0] * 6 for _ in range(2)]
+        nal["scaling-list-dc-coef-minus-eight"] = [[0] * 6 for _ in range(2)]
         nal["scaling-list-delta-coef"] = []
         nal["scaling-list"] = [[[0] * 64 for _ in range(6)] for _ in range(4)]
 
@@ -1243,8 +1243,8 @@ class FFMpreg(object):
                     next_coef = 8
                     coef_num = min(64, 1 << (4 + (size_id << 1)))
                     if size_id > 1:
-                        nal["scaling-list-dc-coef-minus8"][size_id - 2][matrix_id] = buf.rse()
-                        next_coef = nal["scaling-list-dc-coef-minus8"][size_id - 2][matrix_id] + 8
+                        nal["scaling-list-dc-coef-minus-eight"][size_id - 2][matrix_id] = buf.rse()
+                        next_coef = nal["scaling-list-dc-coef-minus-eight"][size_id - 2][matrix_id] + 8
                     for i in range(coef_num):
                         delta = buf.rse()
                         nal["scaling-list-delta-coef"].append(delta)
@@ -1409,9 +1409,9 @@ class FFMpreg(object):
                     nal["conf-win-right-offset"] = buf.rue()
                     nal["conf-win-top-offset"] = buf.rue()
                     nal["conf-win-bottom-offset"] = buf.rue()
-                nal["bit-depth-luma-minus8"] = buf.rue()
-                nal["bit-depth-chroma-minus8"] = buf.rue()
-                nal["log2-max-pic-order-cnt-lsb-minus4"] = buf.rue()
+                nal["bit-depth-luma-minus-eight"] = buf.rue()
+                nal["bit-depth-chroma-minus-eight"] = buf.rue()
+                nal["log2-max-pic-order-cnt-lsb-minus-four"] = buf.rue()
                 nal["sps-sub-layer-ordering-info-present-flag"] = buf.rb(1)
                 nal["sps-max-dec-pic-buffering-minus-one"] = [0] * (nal["sps-max-sub-layers-minus-one"] + 1)
                 nal["sps-max-num-reorder-pics"] = [0] * (nal["sps-max-sub-layers-minus-one"] + 1)
@@ -1504,7 +1504,7 @@ class FFMpreg(object):
                     nal["lt-ref-pic-poc-lsb-sps"] = [0] * nal["num-long-term-ref-pics-sps"]
                     nal["used-by-curr-pic-lt-sps-flag"] = [0] * nal["num-long-term-ref-pics-sps"]
                     for i in range(0, nal["num-long-term-ref-pics-sps"]):
-                        nal["lt-ref-pic-poc-lsb-sps"][i] = buf.rb(nal["log2-max-pic-order-cnt-lsb-minus4"] + 4)
+                        nal["lt-ref-pic-poc-lsb-sps"][i] = buf.rb(nal["log2-max-pic-order-cnt-lsb-minus-four"] + 4)
                         nal["used-by-curr-pic-lt-sps-flag"][i] = buf.rb(1)
                 nal["sps-temporal-mvp-enabled-flag"] = buf.rb(1)
                 nal["strong-intra-smoothing-enabled-flag"] = buf.rb(1)
@@ -1694,10 +1694,10 @@ class FFMpreg(object):
                         nal["cm-ref-layer-id"] = [buf.rb(6) for i in range(0, nal["num-cm-ref-layers-minus-one"] + 1)]
                         nal["cm-octant-depth"] = buf.rb(2)
                         nal["cm-y-part-num-log2"] = buf.rb(2)
-                        nal["luma-bit-depth-cm-input-minus8"] = buf.rue()
-                        nal["chroma-bit-depth-cm-input-minus8"] = buf.rue()
-                        nal["luma-bit-depth-cm-output-minus8"] = buf.rue()
-                        nal["chroma-bit-depth-cm-output-minus8"] = buf.rue()
+                        nal["luma-bit-depth-cm-input-minus-eight"] = buf.rue()
+                        nal["chroma-bit-depth-cm-input-minus-eight"] = buf.rue()
+                        nal["luma-bit-depth-cm-output-minus-eight"] = buf.rue()
+                        nal["chroma-bit-depth-cm-output-minus-eight"] = buf.rue()
                         nal["cm-res-quant-bits"] = buf.rb(2)
                         nal["cm-delta-flc-bits-minus-one"] = buf.rb(2)
                         if nal["cm-octant-depth"] == 1:
@@ -2285,8 +2285,8 @@ class IsoModule(module.RuminantModule):
             atom["data"]["min-spatial-segmentation-idc"] = self.buf.ru16()
             atom["data"]["parallelism-type"] = self.buf.ru8()
             atom["data"]["chroma-format"] = self.buf.ru8()
-            atom["data"]["bit-depth-luma-minus8"] = self.buf.ru8()
-            atom["data"]["bit-depth-chroma-minus8"] = self.buf.ru8()
+            atom["data"]["bit-depth-luma-minus-eight"] = self.buf.ru8()
+            atom["data"]["bit-depth-chroma-minus-eight"] = self.buf.ru8()
             atom["data"]["avg-frame-rate"] = self.buf.rfp16()
 
             atom["data"]["constant-frame-rate"] = self.buf.rb(2)
@@ -4109,9 +4109,9 @@ class MatroskaModule(module.RuminantModule):
                         parsed["parallelism-type"] = self.buf.ru8()
                         parsed["chroma-format"] = self.buf.ru8()
                         parsed["reserved1"] = self.buf.rb(5)
-                        parsed["bit-depth-luma-minus8"] = self.buf.rb(3)
+                        parsed["bit-depth-luma-minus-eight"] = self.buf.rb(3)
                         parsed["reserved2"] = self.buf.rb(5)
-                        parsed["bit-depth-chroma-minus8"] = self.buf.rb(3)
+                        parsed["bit-depth-chroma-minus-eight"] = self.buf.rb(3)
                         parsed["avg-frame-rate"] = self.buf.rfp16()
 
                         parsed["constant-frame-rate"] = self.buf.rb(2)
