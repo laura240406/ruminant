@@ -2,7 +2,7 @@ import os
 import hashlib
 import math
 import hmac
-from typing import Any, Callable, TYPE_CHECKING
+from typing import Any, Callable, TYPE_CHECKING, cast
 
 if TYPE_CHECKING:
 
@@ -630,18 +630,234 @@ def curve25519(base: bytes, scalar: bytes) -> bytes:
     ).to_bytes(32, "little")
 
 
-has_argon2 = True
+def argon2_compress(X, Y):
+    R = bytes([x ^ y for x, y in zip(X, Y)])
+    Q = []
+    Z = [None] * 64
+    for i in range(0, 64, 8):
+        Q.extend(
+            argon2_p((
+                R[i * 16 : (i + 1) * 16],
+                R[(i + 1) * 16 : (i + 2) * 16],
+                R[(i + 2) * 16 : (i + 3) * 16],
+                R[(i + 3) * 16 : (i + 4) * 16],
+                R[(i + 4) * 16 : (i + 5) * 16],
+                R[(i + 5) * 16 : (i + 6) * 16],
+                R[(i + 6) * 16 : (i + 7) * 16],
+                R[(i + 7) * 16 : (i + 8) * 16],
+            ))
+        )
+    for i in range(0, 8):
+        out = argon2_p((
+            Q[i],
+            Q[i + 8],
+            Q[i + 16],
+            Q[i + 24],
+            Q[i + 32],
+            Q[i + 40],
+            Q[i + 48],
+            Q[i + 56],
+        ))
+        for j in range(0, 8):
+            Z[i + j * 8] = out[j]
+    return bytes([x ^ y for x, y in zip(b"".join(Z), R)])
+
+
+def argon2_p(S):
+    v = [None] * 16
+    for i in range(0, 8):
+        v[2 * i] = int.from_bytes(S[i][:8], "little")
+        v[2 * i + 1] = int.from_bytes(S[i][8:16], "little")
+    argon2_g(v, 0, 4, 8, 12)
+    argon2_g(v, 1, 5, 9, 13)
+    argon2_g(v, 2, 6, 10, 14)
+    argon2_g(v, 3, 7, 11, 15)
+    argon2_g(v, 0, 5, 10, 15)
+    argon2_g(v, 1, 6, 11, 12)
+    argon2_g(v, 2, 7, 8, 13)
+    argon2_g(v, 3, 4, 9, 14)
+    return [v[2 * i].to_bytes(8, "little") + v[2 * i + 1].to_bytes(8, "little") for i in range(0, 8)]
+
+
+def argon2_g(s, a, b, c, d):
+    sa, sb, sc, sd = s[a], s[b], s[c], s[d]
+    sa = (sa + sb + 2 * (sa & 0xffffffff) * (sb & 0xffffffff)) & 0xffffffffffffffff
+    tmp = sd ^ sa
+    sd = (tmp >> 32) | ((tmp & 0xffffffff) << 32)
+    sc = (sc + sd + 2 * (sc & 0xffffffff) * (sd & 0xffffffff)) & 0xffffffffffffffff
+    tmp = sb ^ sc
+    sb = (tmp >> 24) | ((tmp & 0xffffFF) << 40)
+    sa = (sa + sb + 2 * (sa & 0xffffffff) * (sb & 0xffffffff)) & 0xffffffffffffffff
+    tmp = sd ^ sa
+    sd = (tmp >> 16) | ((tmp & 0xffff) << 48)
+    sc = (sc + sd + 2 * (sc & 0xffffffff) * (sd & 0xffffffff)) & 0xffffffffffffffff
+    tmp = sb ^ sc
+    sb = (tmp >> 63) | ((tmp << 1) & 0xffffffffffffffff)
+    s[a], s[b], s[c], s[d] = sa, sb, sc, sd
+
+
+def argon2_hp(X, hash_len):
+    tag_bytes = hash_len.to_bytes(4, "little")
+    if hash_len <= 64:
+        return hashlib.blake2b(tag_bytes + X, digest_size=hash_len).digest()
+    buf = b""
+    V = hashlib.blake2b(tag_bytes + X).digest()
+    buf += V[:32]
+    i = hash_len - 32
+    while i > 64:
+        V = hashlib.blake2b(V).digest()
+        buf += V[:32]
+        i -= 32
+    buf += hashlib.blake2b(V, digest_size=i).digest()
+    return buf
+
+
+def argon2_fill(
+    B,
+    t,
+    segment,
+    i,
+    typ,
+    segment_length,
+    H0,
+    q,
+    parallelism,
+    mp,
+    iterations,
+    version,
+):
+    ct = (typ == 1) or (typ == 2 and t == 0 and segment <= 1)
+    if ct:
+        pr = []
+        counter = 0
+        while len(pr) < segment_length:
+            counter += 1
+            input_block = (
+                t.to_bytes(8, "little")
+                + i.to_bytes(8, "little")
+                + segment.to_bytes(8, "little")
+                + mp.to_bytes(8, "little")
+                + iterations.to_bytes(8, "little")
+                + typ.to_bytes(8, "little")
+                + counter.to_bytes(8, "little")
+                + bytes(968)
+            )
+            address_block = argon2_compress(
+                bytes(1024),
+                argon2_compress(bytes(1024), input_block),
+            )
+            for addr_i in range(0, 1024, 8):
+                pr.append((
+                    int.from_bytes(address_block[addr_i : addr_i + 4], "little"),
+                    int.from_bytes(address_block[addr_i + 4 : addr_i + 8], "little"),
+                ))
+
+    for index in range(0, segment_length):
+        j = segment * segment_length + index
+        if t == 0 and j < 2:
+            B[i][j] = argon2_hp(H0 + j.to_bytes(4, "little") + i.to_bytes(4, "little"), 1024)
+            continue
+
+        if ct:
+            J1, J2 = pr[index]
+        else:
+            prev_block = B[i][(j - 1) % q]
+            J1 = int.from_bytes(prev_block[:4], "little")
+            J2 = int.from_bytes(prev_block[4:8], "little")
+
+        i_prime = i if t == 0 and segment == 0 else J2 % parallelism
+
+        if t == 0:
+            if segment == 0 or i == i_prime:
+                ref_area_size = j - 1
+            elif index == 0:
+                ref_area_size = segment * segment_length - 1
+            else:
+                ref_area_size = segment * segment_length
+        elif i == i_prime:
+            ref_area_size = q - segment_length + index - 1
+        elif index == 0:
+            ref_area_size = q - segment_length - 1
+        else:
+            ref_area_size = q - segment_length
+
+        rel_pos = (J1**2) >> 32
+        rel_pos = ref_area_size - 1 - ((ref_area_size * rel_pos) >> 32)
+        start_pos = 0
+
+        if t != 0 and segment != 3:
+            start_pos = (segment + 1) * segment_length
+        j_prime = (start_pos + rel_pos) % q
+
+        new_block = argon2_compress(B[i][(j - 1) % q], B[i_prime][j_prime])
+        if t != 0 and version == 0x13:
+            new_block = bytes([x ^ y for x, y in zip(B[i][j], new_block)])
+        B[i][j] = new_block
+
+    return B[i][segment * segment_length : (segment + 1) * segment_length]
+
+
+has_native_argon2 = True
 try:
     import argon2 as _argon2
 except ImportError:
-    has_argon2 = False
+    has_native_argon2 = False
 
 
 def argon2(
     secret: bytes, salt: bytes, iterations: int, memory: int, parallelism: int, hash_len: int, typ: str, version: int = 0x13
 ) -> bytes:
-    if not has_argon2:
-        raise Exception()
+    if not has_native_argon2:
+        ityp = {
+            "d": 0,
+            "i": 1,
+            "id": 2,
+        }.get(typ, 0)
+
+        H0 = hashlib.blake2b(
+            parallelism.to_bytes(4, "little")
+            + hash_len.to_bytes(4, "little")
+            + memory.to_bytes(4, "little")
+            + iterations.to_bytes(4, "little")
+            + version.to_bytes(4, "little")
+            + ityp.to_bytes(4, "little")
+            + len(secret).to_bytes(4, "little")
+            + secret
+            + len(salt).to_bytes(4, "little")
+            + salt
+            + bytes(4)
+            + bytes(4)
+        ).digest()
+
+        mp = (memory // (4 * parallelism)) * (4 * parallelism)
+        q = mp // parallelism
+        segment_length = q // 4
+
+        B = [[None] * q for _ in range(0, parallelism)]
+
+        for t in range(0, iterations):
+            for segment in range(0, 4):
+                for i in range(0, parallelism):
+                    argon2_fill(
+                        B,
+                        t,
+                        segment,
+                        i,
+                        ityp,
+                        segment_length,
+                        H0,
+                        q,
+                        parallelism,
+                        mp,
+                        iterations,
+                        version,
+                    )
+
+        BSUM = bytes(1024)
+        for i in range(0, parallelism):
+            BSUM = bytes([x ^ y for x, y in zip(BSUM, cast(bytes, B[i][q - 1]))])
+
+        return argon2_hp(BSUM, hash_len)
 
     return _argon2.low_level.hash_secret_raw(
         secret,

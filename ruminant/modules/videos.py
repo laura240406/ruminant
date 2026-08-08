@@ -6091,6 +6091,9 @@ class JvtNalH264Module(module.RuminantModule):
 
     @staticmethod
     def identify(buf: Buf, ctx={}) -> bool:
+        if buf.available() < 5:
+            return False
+
         with buf:
             return buf.ru32() == 1 and buf.ru8() & 0x1f == 0x07
 

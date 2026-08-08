@@ -332,7 +332,6 @@ class KdbxModule(module.RuminantModule):
 
         if (
             meta["key"]["found"]
-            and crypto.has_argon2
             and mode in ("2d", "2id")
             and encryption_algorithm in ("aes", "chacha20")
             and compression_algorithm in (None, "gzip")
