@@ -694,7 +694,17 @@ class FFMpreg(object):
                         break
 
                 nal["type"] = utils.unraw(
-                    t, 1, {0x00: "buffering_period", 0x01: "pic_timing", 0x05: "user_data_unregistered"}, True
+                    t,
+                    1,
+                    {
+                        0x00: "buffering_period",
+                        0x01: "pic_timing",
+                        0x05: "user_data_unregistered",
+                        0x2d: "frame_packing_arrangement",
+                        0x89: "mastering_display_colour_volume",
+                        0x90: "content_light_level_info",
+                    },
+                    True,
                 )
                 nal["length"] = l
 
@@ -765,6 +775,35 @@ class FFMpreg(object):
                                         ts["time-offset"] = buf.rb(params.get("time-offset-length", 0))
 
                                 nal["clock-ts"].append(ts)
+                    case "frame_packing_arrangement":
+                        nal["frame-packing-arrangement-id"] = buf.rue()
+                        nal["frame-packing-arrangement-cancel-flag"] = buf.rb(1)
+                        if not nal["frame-packing-arrangement-cancel-flag"]:
+                            nal["frame-packing-arrangement-type"] = buf.rb(7)
+                            nal["quincunx-sampling-flag"] = buf.rb(1)
+                            nal["content-interpretation-type"] = buf.rb(6)
+                            nal["spatial-flipping-flag"] = buf.rb(1)
+                            nal["frame0-flipped-flag"] = buf.rb(1)
+                            nal["field-views-flag"] = buf.rb(1)
+                            nal["current-frame-is-frame0-flag"] = buf.rb(1)
+                            nal["frame0-self-contained-flag"] = buf.rb(1)
+                            nal["frame1-self-contained-flag"] = buf.rb(1)
+                            if not nal["quincunx-sampling-flag"] and nal["frame-packing-arrangement-type"] != 5:
+                                nal["frame0-grid-position-x"] = buf.rb(4)
+                                nal["frame0-grid-position-y"] = buf.rb(4)
+                                nal["frame1-grid-position-x"] = buf.rb(4)
+                                nal["frame1-grid-position-y"] = buf.rb(4)
+                            nal["frame-packing-arrangement-reserved-byte"] = buf.rb(8)
+                            nal["frame-packing-arrangement-repetition-period"] = buf.rue()
+                        nal["frame-packing-arrangement-extension-flag"] = buf.rb(1)
+                    case "mastering_display_colour_volume":
+                        nal["mdcv-display-primaries"] = [(buf.ru16(), buf.ru16()) for i in range(0, 3)]
+                        nal["mdcv-white-point"] = (buf.ru16(), buf.ru16())
+                        nal["mdcv-max-display-mastering-luminance"] = buf.ru32()
+                        nal["mdcv-min-display-mastering-luminance"] = buf.ru32()
+                    case "content_light_level_info":
+                        nal["clli-max-content-light-level"] = buf.ru16()
+                        nal["clli-max-pic-average-light-level"] = buf.ru16()
                     case _:
                         nal["payload"] = buf.rh(buf.unit)
                         nal["unknown"] = True
