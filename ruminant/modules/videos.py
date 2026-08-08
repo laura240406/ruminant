@@ -1756,14 +1756,7 @@ class FFMpreg(object):
 
     @staticmethod
     def read_h266_nalu(buf: Buf, state={}) -> dict:
-        buf = Buf(
-            buf
-            .read(buf.unit)
-            .replace(b"\x00\x00\x03\x00", b"\x00\x00\x00")
-            .replace(b"\x00\x00\x03\x01", b"\x00\x00\x01")
-            .replace(b"\x00\x00\x03\x02", b"\x00\x00\x02")
-            .replace(b"\x00\x00\x03\x03", b"\x00\x00\x03")
-        )
+        buf = Buf(buf.read(buf.unit).replace(b"\x00\x00\x03", b"\x00\x00"))
 
         nal = {}
         nal["length"] = buf.available()
