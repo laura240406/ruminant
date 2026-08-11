@@ -4,6 +4,8 @@ import math
 import hmac
 from typing import Any, Callable, TYPE_CHECKING, cast
 
+native_mode = "RUMINANT_NATIVE_MODE" in os.environ
+
 if TYPE_CHECKING:
 
     class AES:
@@ -18,7 +20,7 @@ if TYPE_CHECKING:
 
 else:
     try:
-        if "RUMINANT_NATIVE_MODE" in os.environ:
+        if native_mode:
             raise Exception()
 
         try:
@@ -807,7 +809,7 @@ except ImportError:
 def argon2(
     secret: bytes, salt: bytes, iterations: int, memory: int, parallelism: int, hash_len: int, typ: str, version: int = 0x13
 ) -> bytes:
-    if not has_native_argon2:
+    if not has_native_argon2 or native_mode:
         ityp = {
             "d": 0,
             "i": 1,

@@ -902,3 +902,18 @@ def chacha20_poly1305():
         ).hex(),
         "4c616469657320616e642047656e746c656d656e206f662074686520636c617373206f66202739393a204966204920636f756c64206f6666657220796f75206f6e6c79206f6e652074697020666f7220746865206675747572652c2073756e73637265656e20776f756c642062652069742e",
     )
+
+
+@test("Cryptography", "Argon2i")
+def argon2i():
+    assert_eq(crypto.argon2(b"\x01" * 32, b"\x02" * 32, 4, 32, 4, 32, "i").hex(), "3987246ad001e4d85bf24829332821ee38aec95434e9d13df3fd7fb783fdd45d")
+
+
+@test("Cryptography", "Argon2d")
+def argon2d():
+    assert_eq(crypto.argon2(b"\x01" * 32, b"\x02" * 32, 4, 32, 4, 32, "d").hex(), "e45d62c8c56b1756428d10d8d0fa34bb7588b1f3f5065530d72ac3dedd6e864d")
+
+
+@test("Cryptography", "Argon2id")
+def argon2id():
+    assert_eq(crypto.argon2(b"\x01" * 32, b"\x02" * 32, 4, 32, 4, 32, "id").hex(), "e93820f3bea5f680d17351abc63a2b06a76152bc7643b4dec49fbf1eb5eec562")
