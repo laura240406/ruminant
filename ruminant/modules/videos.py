@@ -4012,8 +4012,11 @@ class MatroskaModule(module.RuminantModule):
 
         for stream in streams:
             ranges: list[int] = utils.expand_ranges(
-                secrets.get_parameter("0", stream, "ranges"), 0, len(sample_offsets[track_id]) - 1
+                secrets.get_parameter("0", stream, "ranges"), 0, len(sample_offsets[stream["id"]]) - 1
             )
+
+            if len(sample_offsets[stream["id"]]) == 0:
+                ranges = []
 
             parsed: dict = {}
             nalu: dict = {}
