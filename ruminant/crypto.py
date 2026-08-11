@@ -456,22 +456,32 @@ def chacha20(msg: bytes, key: bytes, nonce: bytes, counter: int = 1) -> bytes:
 def chacha20_poly1305(msg: bytes, key: bytes, nonce: bytes, tag: bytes, aad: bytes = b"") -> bytes:
     assert len(tag) == 16, "invalid tag length"
 
-    # lower throws asserts already
-    poly1305_key = chacha20(bytes(32), key, nonce, counter=0)
+    try:
+        if native_mode:
+            raise NotImplementedError()
 
-    mac_data = b""
-    mac_data += aad
-    if len(mac_data) % 16 != 0:
-        mac_data += bytes(16 - len(mac_data) % 16)
-    mac_data += msg
-    if len(mac_data) % 16 != 0:
-        mac_data += bytes(16 - len(mac_data) % 16)
-    mac_data += len(aad).to_bytes(8, "little")
-    mac_data += len(msg).to_bytes(8, "little")
+        from Crypto.Cipher import ChaCha20_Poly1305
 
-    assert poly1305(mac_data, poly1305_key) == tag, "tag mismatch"
+        cipher = ChaCha20_Poly1305.new(key=key, nonce=nonce)
+        cipher.update(aad)
+        return cipher.decrypt_and_verify(msg, tag)
+    except (NotImplementedError, ModuleNotFoundError):
+        # lower throws asserts already
+        poly1305_key = chacha20(bytes(32), key, nonce, counter=0)
 
-    return chacha20(msg, key, nonce)
+        mac_data = b""
+        mac_data += aad
+        if len(mac_data) % 16 != 0:
+            mac_data += bytes(16 - len(mac_data) % 16)
+        mac_data += msg
+        if len(mac_data) % 16 != 0:
+            mac_data += bytes(16 - len(mac_data) % 16)
+        mac_data += len(aad).to_bytes(8, "little")
+        mac_data += len(msg).to_bytes(8, "little")
+
+        assert poly1305(mac_data, poly1305_key) == tag, "tag mismatch"
+
+        return chacha20(msg, key, nonce)
 
 
 def hkdf_extract(salt: bytes, ikm: bytes) -> bytes:
