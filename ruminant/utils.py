@@ -1704,9 +1704,6 @@ def _clean_marshal(o):
     elif isinstance(o, tuple):
         return [_clean_marshal(x) for x in o]
     elif isinstance(o, dict):
-        if "co_code" in o:
-            pass
-
         return {x: _clean_marshal(y) for x, y in o.items()}
     elif isinstance(o, set):
         return [_clean_marshal(x) for x in o]
