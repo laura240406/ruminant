@@ -672,7 +672,7 @@ def read_pgp_subpacket(buf):
 
             data["algorithms"] = []
             while buf.unit > 0:
-                data["algorithms"].append(unraw(buf.ru8(), 1, PGP_CIPHERS))
+                data["algorithms"].append(unraw(buf.ru8(), 1, PGP_CIPHERS, True))
         case 0x10:
             packet["type"] = "Issuer"
             data["key-id"] = buf.rh(8)
@@ -697,19 +697,13 @@ def read_pgp_subpacket(buf):
 
             data["algorithms"] = []
             while buf.unit > 0:
-                data["algorithms"].append(unraw(buf.ru8(), 1, PGP_HASHES))
+                data["algorithms"].append(unraw(buf.ru8(), 1, PGP_HASHES, True))
         case 0x16:
             packet["type"] = "Preferred Compression Algorithms"
 
             data["algorithms"] = []
             while buf.unit > 0:
-                data["algorithms"].append(
-                    unraw(
-                        buf.ru8(),
-                        1,
-                        {0: "Uncompressed", 1: "ZIP", 2: "ZLIB", 3: "BZip2"},
-                    )
-                )
+                data["algorithms"].append(unraw(buf.ru8(), 1, {0: "Uncompressed", 1: "ZIP", 2: "ZLIB", 3: "BZip2"}, True))
         case 0x17:
             packet["type"] = "Key Server Preferences"
             flags = buf.read(buf.unit)
@@ -751,6 +745,7 @@ def read_pgp_subpacket(buf):
                     3: "Key is retired and no longer used",
                     32: "User ID information is no longer valid",
                 },
+                True,
             )
             packet["reason-message"] = buf.readunit().decode("utf-8")
         case 0x1e:
@@ -766,7 +761,7 @@ def read_pgp_subpacket(buf):
 
             data["version"] = buf.ru8()
             match data["version"]:
-                case 4:
+                case 4 | 6:
                     data["fingerprint"] = buf.rh(buf.unit)
                 case _:
                     packet["unknown"] = True
@@ -775,7 +770,7 @@ def read_pgp_subpacket(buf):
 
             data["algorithms"] = []
             while buf.unit > 0:
-                data["algorithms"].append(unraw(buf.ru8(), 1, PGP_AEADS))
+                data["algorithms"].append(unraw(buf.ru8(), 1, PGP_AEADS, True))
         case _:
             if typ & 0x7f >= 100:
                 packet["type"] = f"Private (0x{hex(typ)[2:].zfill(2)})"
@@ -878,23 +873,23 @@ def _read_pgp(buf, fake=None):
             match data["version"]:
                 case 3:
                     buf.skip(1)
-                    data["type"] = unraw(buf.ru8(), 1, PGP_SIGNATURE_TYPES)
+                    data["type"] = unraw(buf.ru8(), 1, PGP_SIGNATURE_TYPES, True)
                     data["created-at"] = datetime.fromtimestamp(buf.ru32(), timezone.utc).isoformat()
 
                     data["key-id"] = buf.rh(8)
 
                     algorithm = buf.ru8()
-                    data["public-key-algorithm"] = unraw(algorithm, 1, PGP_PUBLIC_KEYS)
+                    data["public-key-algorithm"] = unraw(algorithm, 1, PGP_PUBLIC_KEYS, True)
 
-                    data["hash-algorithm"] = unraw(buf.ru8(), 1, PGP_HASHES)
+                    data["hash-algorithm"] = unraw(buf.ru8(), 1, PGP_HASHES, True)
                     data["hash-prefix"] = buf.rh(2)
                 case 4 | 6:
-                    data["type"] = unraw(buf.ru8(), 1, PGP_SIGNATURE_TYPES)
+                    data["type"] = unraw(buf.ru8(), 1, PGP_SIGNATURE_TYPES, True)
 
                     algorithm = buf.ru8()
-                    data["public-key-algorithm"] = unraw(algorithm, 1, PGP_PUBLIC_KEYS)
+                    data["public-key-algorithm"] = unraw(algorithm, 1, PGP_PUBLIC_KEYS, True)
 
-                    data["hash-algorithm"] = unraw(buf.ru8(), 1, PGP_HASHES)
+                    data["hash-algorithm"] = unraw(buf.ru8(), 1, PGP_HASHES, True)
 
                     buf.pushunit()
                     buf.setunit(buf.ru16())
@@ -927,6 +922,10 @@ def _read_pgp(buf, fake=None):
                     data["signature"] = {"c": read_pgp_mpi(buf)}
                 case 0x11 | 0x13 | 0x16:
                     data["signature"] = {"r": read_pgp_mpi(buf), "s": read_pgp_mpi(buf)}
+                case 0x1b:
+                    data["signature"] = {"rs": buf.rh(64)}
+                case 0x1c:
+                    data["signature"] = {"rs": buf.rh(117)}
                 case _:
                     data["signature"] = {"unknown": True}
         case 0x03:
@@ -935,16 +934,16 @@ def _read_pgp(buf, fake=None):
 
             match data["version"]:
                 case 4:
-                    data["algorithm"] = unraw(buf.ru8(), 1, PGP_S2K_TYPES)
+                    data["algorithm"] = unraw(buf.ru8(), 1, PGP_S2K_TYPES, True)
 
                     match data["algorithm"]["raw"]:
                         case 0:
-                            data["hash-algorithm"] = unraw(buf.ru8(), 1, PGP_HASHES)
+                            data["hash-algorithm"] = unraw(buf.ru8(), 1, PGP_HASHES, True)
                         case 1:
-                            data["hash-algorithm"] = unraw(buf.ru8(), 1, PGP_HASHES)
+                            data["hash-algorithm"] = unraw(buf.ru8(), 1, PGP_HASHES, True)
                             data["salt"] = buf.rh(8)
                         case 3:
-                            data["hash-algorithm"] = unraw(buf.ru8(), 1, PGP_HASHES)
+                            data["hash-algorithm"] = unraw(buf.ru8(), 1, PGP_HASHES, True)
                             data["salt"] = buf.rh(8)
                             c = buf.ru8()
                             data["count"] = (16 + (c & 0x0f)) << ((c >> 4) + 6)
@@ -964,9 +963,9 @@ def _read_pgp(buf, fake=None):
 
             match data["version"]:
                 case 3:
-                    data["type"] = unraw(buf.ru8(), 1, PGP_SIGNATURE_TYPES)
-                    data["hash-algorithm"] = unraw(buf.ru8(), 1, PGP_HASHES)
-                    data["public-key-algorithm"] = unraw(buf.ru8(), 1, PGP_PUBLIC_KEYS)
+                    data["type"] = unraw(buf.ru8(), 1, PGP_SIGNATURE_TYPES, True)
+                    data["hash-algorithm"] = unraw(buf.ru8(), 1, PGP_HASHES, True)
+                    data["public-key-algorithm"] = unraw(buf.ru8(), 1, PGP_PUBLIC_KEYS, True)
                     data["key-id"] = buf.rh(8)
                     data["nested"] = buf.ru8() == 0
                 case _:
@@ -989,12 +988,18 @@ def _read_pgp(buf, fake=None):
                     data["expiry-days"] = buf.ru16()
                     algorithm = buf.ru8()
 
-                    data["algorithm"] = unraw(algorithm, 1, PGP_PUBLIC_KEYS)
+                    data["algorithm"] = unraw(algorithm, 1, PGP_PUBLIC_KEYS, True)
                 case 4:
                     data["created-at"] = datetime.fromtimestamp(buf.ru32(), timezone.utc).isoformat()
                     algorithm = buf.ru8()
 
-                    data["algorithm"] = unraw(algorithm, 1, PGP_PUBLIC_KEYS)
+                    data["algorithm"] = unraw(algorithm, 1, PGP_PUBLIC_KEYS, True)
+                case 6:
+                    data["created-at"] = datetime.fromtimestamp(buf.ru32(), timezone.utc).isoformat()
+                    algorithm = buf.ru8()
+
+                    data["algorithm"] = unraw(algorithm, 1, PGP_PUBLIC_KEYS, True)
+                    data["key-length"] = buf.ru32()
                 case _:
                     packet["unknown"] = True
 
@@ -1022,8 +1027,8 @@ def _read_pgp(buf, fake=None):
 
                     length = buf.ru8()
                     buf.skip(1)
-                    data["key"]["kdf-hash-function"] = unraw(buf.ru8(), 1, PGP_HASHES)
-                    data["key"]["kdf-cipher"] = unraw(buf.ru8(), 1, PGP_CIPHERS)
+                    data["key"]["kdf-hash-function"] = unraw(buf.ru8(), 1, PGP_HASHES, True)
+                    data["key"]["kdf-cipher"] = unraw(buf.ru8(), 1, PGP_CIPHERS, True)
 
                     if length > 3:
                         data["key"]["sender"] = buf.rs(32)
@@ -1033,21 +1038,25 @@ def _read_pgp(buf, fake=None):
                         "oid": read_oid(buf, buf.ru8() - 1),
                         "point": read_pgp_mpi(buf),
                     }
+                case 0x19:
+                    data["key"] = {"point": buf.rh(32)}
+                case 0x1a:
+                    data["key"] = {"point": buf.rh(56)}
+                case 0x1b:
+                    data["key"] = {"point": buf.rh(32)}
+                case 0x1c:
+                    data["key"] = {"point": buf.rh(57)}
                 case _:
                     packet["unknown"] = True
 
             if secret:
                 s2k_usage = buf.ru8()
-                data["s2k-usage"] = unraw(
-                    s2k_usage,
-                    1,
-                    {0: "Unencrypted", 253: "AEAD", 254: "CFB", 255: "MalleableCFB"},
-                )
+                data["s2k-usage"] = unraw(s2k_usage, 1, {0: "Unencrypted", 253: "AEAD", 254: "CFB", 255: "MalleableCFB"}, True)
         case 0x08:
             packet["tag"] = "Compressed Data"
 
             method = buf.ru8()
-            data["method"] = unraw(method, 1, {0: "Uncompressed", 1: "ZIP", 2: "ZLIB", 3: "BZip2"})
+            data["method"] = unraw(method, 1, {0: "Uncompressed", 1: "ZIP", 2: "ZLIB", 3: "BZip2"}, True)
 
             content = buf.readunit()
             match method:
