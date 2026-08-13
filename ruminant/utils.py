@@ -719,17 +719,18 @@ def read_pgp_subpacket(buf):
             data["uri"] = buf.readunit().decode("utf-8")
         case 0x1b:
             packet["type"] = "Key Flags"
-            flags = buf.ru8()
-            data["flags"] = {
-                "raw": flags,
-                "can-certify-user-id": bool(flags & (1 << 0)),
-                "can-sign-data": bool(flags & (1 << 1)),
-                "can-encrypt-communication": bool(flags & (1 << 2)),
-                "can-encrypt-storage": bool(flags & (1 << 3)),
-                "key-is-split": bool(flags & (1 << 4)),
-                "can-authenticate": bool(flags & (1 << 5)),
-                "key-is-shared": bool(flags & (1 << 4)),
-            }
+            data["flags"] = unpack_flags(
+                buf.ru8(),
+                (
+                    (0, "can-certify-user-id"),
+                    (1, "can-sign-data"),
+                    (2, "can-encrypt-communication"),
+                    (3, "can-encrypt-storage"),
+                    (4, "key-is-split"),
+                    (5, "can-authenticate"),
+                    (6, "key-is-shared"),
+                ),
+            )
         case 0x1c:
             packet["type"] = "Signer's User ID"
             data["fingerprint"] = buf.rs(buf.unit)
@@ -751,8 +752,7 @@ def read_pgp_subpacket(buf):
         case 0x1e:
             packet["type"] = "Features"
 
-            flags = buf.read(buf.unit)
-            data["flags"] = {"raw": flags.hex(), "use-mdc": bool(flags[0] & 0x01)}
+            data["flags"] = unpack_flags(int.from_bytes(buf.read(buf.unit), "little"), ((0, "seipd-v1"), (3, "seipd-v2")))
         case 0x20:
             packet["type"] = "Embedded Signature"
             data["embedded-packet"] = _read_pgp(buf, fake=(2, buf.unit))
