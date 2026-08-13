@@ -31,10 +31,12 @@ full = [
   "tqdm",
   "pyzstd",
   "cryptography",
+  "pycryptodome",
   "argon2-cffi"
 ]
 dev = [
-  "flake8"
+  "flake8",
+  "mypy"
 ]
 
 [tool.mypy]
