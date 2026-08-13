@@ -1504,96 +1504,222 @@ def unix_to_date(ts):
     return datetime.fromtimestamp(ts, timezone.utc).isoformat()
 
 
-def read_marshal(buf, version):
-    typ = buf.ru8()
-    flag_ref = bool(typ & 0x80)  # noqa: F841
-    typ = chr(typ & 0x7f)
+NULL = object()
+
+
+def _read_marshal(buf, version, refs=None):
+    if refs is None:
+        refs = []
+
+    type_byte = buf.ru8()
+    flag_ref = bool(type_byte & 0x80)
+    typ = chr(type_byte & 0x7f)
+
+    ref_idx = None
+    if flag_ref:
+        ref_idx = len(refs)
+        refs.append(None)
+
+    def set_ref(val):
+        if ref_idx is not None:
+            refs[ref_idx] = val
+        return val
 
     match typ:
+        case "\x00" | "0":
+            return NULL
+        case "N":
+            return set_ref(None)
+        case "F":
+            return set_ref(False)
+        case "T":
+            return set_ref(True)
+        case "S":
+            return set_ref(StopIteration)
+        case ".":
+            return set_ref(...)
+        case "i":
+            return set_ref(buf.ri32l())
+        case "I":
+            return set_ref(buf.ri64l())
+        case "f":
+            length = buf.ru8()
+            s = buf.rs(length)
+            return set_ref(float(s))
+        case "g":
+            return set_ref(buf.rf64l())
+        case "x":
+            len_r = buf.ru8()
+            r_s = buf.rs(len_r)
+            len_i = buf.ru8()
+            i_s = buf.rs(len_i)
+            return set_ref(complex(float(r_s), float(i_s)))
+        case "y":
+            r = buf.rf64l()
+            i = buf.rf64l()
+            return set_ref(complex(r, i))
+        case "l":
+            n = buf.ri32l()
+            val = 0
+            for i in range(abs(n)):
+                digit = buf.ru16l()
+                val += digit << (15 * i)
+            if n < 0:
+                val = -val
+            return set_ref(val)
+        case "s" | "t":
+            return set_ref(buf.read(buf.ru32l()))
+        case "u" | "a" | "A":
+            return set_ref(buf.rs(buf.ru32l()))
+        case "z" | "Z":
+            return set_ref(buf.rs(buf.ru8()))
+        case "(":
+            items = []
+            set_ref(items)
+            for _ in range(buf.ru32l()):
+                items.append(_read_marshal(buf, version, refs))
+            res = tuple(items)
+            set_ref(res)
+            return res
+        case ")":
+            items = []
+            set_ref(items)
+            for _ in range(buf.ru8()):
+                items.append(_read_marshal(buf, version, refs))
+            res = tuple(items)
+            set_ref(res)
+            return res
+        case "[":
+            items = []
+            set_ref(items)
+            for _ in range(buf.ru32l()):
+                items.append(_read_marshal(buf, version, refs))
+            return items
+        case "{":
+            obj = {}
+            set_ref(obj)
+            while True:
+                key = _read_marshal(buf, version, refs)
+                if key is NULL:
+                    break
+                val = _read_marshal(buf, version, refs)
+                obj[key] = val
+            return obj
+        case "<":
+            items = set()
+            set_ref(items)
+            for _ in range(buf.ru32l()):
+                items.add(_read_marshal(buf, version, refs))
+            return items
+        case ">":
+            items = []
+            set_ref(items)
+            for _ in range(buf.ru32l()):
+                items.append(_read_marshal(buf, version, refs))
+            res = frozenset(items)
+            set_ref(res)
+            return res
+        case "r":
+            idx = buf.ru32l()
+            return refs[idx]
         case "c":
             obj = {}
+            set_ref(obj)
 
-            if version < 3250:
+            if version < 3130:  # Python 2.x
                 obj["co_argcount"] = buf.ru32l()
                 obj["co_nlocals"] = buf.ru32l()
                 obj["co_stacksize"] = buf.ru32l()
                 obj["co_flags"] = buf.ru32l()
-                obj["co_code"] = read_marshal(buf, version)
-                obj["co_consts"] = read_marshal(buf, version)
-                obj["co_names"] = read_marshal(buf, version)
-                obj["co_varnames"] = read_marshal(buf, version)
-                obj["co_freevars"] = read_marshal(buf, version)
-                obj["co_cellvars"] = read_marshal(buf, version)
-                obj["co_filename"] = read_marshal(buf, version)
-                obj["co_name"] = read_marshal(buf, version)
+                obj["co_code"] = _read_marshal(buf, version, refs)
+                obj["co_consts"] = _read_marshal(buf, version, refs)
+                obj["co_names"] = _read_marshal(buf, version, refs)
+                obj["co_varnames"] = _read_marshal(buf, version, refs)
+                obj["co_freevars"] = _read_marshal(buf, version, refs)
+                obj["co_cellvars"] = _read_marshal(buf, version, refs)
+                obj["co_filename"] = _read_marshal(buf, version, refs)
+                obj["co_name"] = _read_marshal(buf, version, refs)
                 obj["co_firstlineno"] = buf.ru32l()
-                obj["co_lnotab"] = read_marshal(buf, version)
-            elif version < 3400:
+                obj["co_lnotab"] = _read_marshal(buf, version, refs)
+            elif version < 3400:  # Python 3.0 - 3.7
                 obj["co_argcount"] = buf.ru32l()
                 obj["co_kwonlyargcount"] = buf.ru32l()
                 obj["co_nlocals"] = buf.ru32l()
                 obj["co_stacksize"] = buf.ru32l()
                 obj["co_flags"] = buf.ru32l()
-                obj["co_code"] = read_marshal(buf, version)
-                obj["co_consts"] = read_marshal(buf, version)
-                obj["co_names"] = read_marshal(buf, version)
-                obj["co_varnames"] = read_marshal(buf, version)
-                obj["co_freevars"] = read_marshal(buf, version)
-                obj["co_cellvars"] = read_marshal(buf, version)
-                obj["co_filename"] = read_marshal(buf, version)
-                obj["co_name"] = read_marshal(buf, version)
+                obj["co_code"] = _read_marshal(buf, version, refs)
+                obj["co_consts"] = _read_marshal(buf, version, refs)
+                obj["co_names"] = _read_marshal(buf, version, refs)
+                obj["co_varnames"] = _read_marshal(buf, version, refs)
+                obj["co_freevars"] = _read_marshal(buf, version, refs)
+                obj["co_cellvars"] = _read_marshal(buf, version, refs)
+                obj["co_filename"] = _read_marshal(buf, version, refs)
+                obj["co_name"] = _read_marshal(buf, version, refs)
                 obj["co_firstlineno"] = buf.ru32l()
-                obj["co_lnotab"] = read_marshal(buf, version)
-            elif version < 3450:
+                obj["co_lnotab"] = _read_marshal(buf, version, refs)
+            elif version < 3450:  # Python 3.8 - 3.10
                 obj["co_argcount"] = buf.ru32l()
                 obj["co_posonlyargcount"] = buf.ru32l()
                 obj["co_kwonlyargcount"] = buf.ru32l()
                 obj["co_nlocals"] = buf.ru32l()
                 obj["co_stacksize"] = buf.ru32l()
                 obj["co_flags"] = buf.ru32l()
-                obj["co_code"] = read_marshal(buf, version)
-                obj["co_consts"] = read_marshal(buf, version)
-                obj["co_names"] = read_marshal(buf, version)
-                obj["co_varnames"] = read_marshal(buf, version)
-                obj["co_freevars"] = read_marshal(buf, version)
-                obj["co_cellvars"] = read_marshal(buf, version)
-                obj["co_filename"] = read_marshal(buf, version)
-                obj["co_name"] = read_marshal(buf, version)
+                obj["co_code"] = _read_marshal(buf, version, refs)
+                obj["co_consts"] = _read_marshal(buf, version, refs)
+                obj["co_names"] = _read_marshal(buf, version, refs)
+                obj["co_varnames"] = _read_marshal(buf, version, refs)
+                obj["co_freevars"] = _read_marshal(buf, version, refs)
+                obj["co_cellvars"] = _read_marshal(buf, version, refs)
+                obj["co_filename"] = _read_marshal(buf, version, refs)
+                obj["co_name"] = _read_marshal(buf, version, refs)
                 obj["co_firstlineno"] = buf.ru32l()
-                obj["co_lnotab"] = read_marshal(buf, version)
-            elif version < 3655:
+                obj["co_linetable" if version >= 3430 else "co_lnotab"] = _read_marshal(buf, version, refs)
+            else:  # Python 3.11 - 3.14+
                 obj["co_argcount"] = buf.ru32l()
                 obj["co_posonlyargcount"] = buf.ru32l()
                 obj["co_kwonlyargcount"] = buf.ru32l()
                 obj["co_stacksize"] = buf.ru32l()
                 obj["co_flags"] = buf.ru32l()
-                obj["co_code"] = read_marshal(buf, version)
-                return obj
-                obj["co_consts"] = read_marshal(buf, version)
-                obj["co_names"] = read_marshal(buf, version)
-                obj["co_localplusnames"] = read_marshal(buf, version)
-                obj["co_localspluskinds"] = read_marshal(buf, version)
-                obj["co_varnames"] = read_marshal(buf, version)
-                obj["co_freevars"] = read_marshal(buf, version)
-                obj["co_cellvars"] = read_marshal(buf, version)
-                obj["co_filename"] = read_marshal(buf, version)
-                obj["co_qualname"] = read_marshal(buf, version)
-                obj["co_name"] = read_marshal(buf, version)
+                obj["co_code"] = _read_marshal(buf, version, refs)
+                obj["co_consts"] = _read_marshal(buf, version, refs)
+                obj["co_names"] = _read_marshal(buf, version, refs)
+                obj["co_localsplusnames"] = _read_marshal(buf, version, refs)
+                obj["co_localspluskinds"] = _read_marshal(buf, version, refs)
+                obj["co_filename"] = _read_marshal(buf, version, refs)
+                obj["co_name"] = _read_marshal(buf, version, refs)
+                obj["co_qualname"] = _read_marshal(buf, version, refs)
                 obj["co_firstlineno"] = buf.ru32l()
-                obj["co_linetable"] = read_marshal(buf, version)
-                obj["co_exceptiontable"] = read_marshal(buf, version)
-            else:
-                raise ValueError(f"Unsupported version {version}")
-        case "s":
-            obj = buf.read(buf.ru32l()).hex()
-        case ")":
-            obj = []
-            for i in range(0, buf.ru32l()):
-                obj.append(read_marshal(buf, version))
+                obj["co_linetable"] = _read_marshal(buf, version, refs)
+                obj["co_exceptiontable"] = _read_marshal(buf, version, refs)
+
+            return obj
+
         case _:
-            raise ValueError(f"Unknown marshal typ '{typ}'")
+            raise ValueError(f"Unknown marshal type character '{typ}' (0x{ord(typ):02x})")
 
-    return obj
+
+def _clean_marshal(o):
+    if isinstance(o, list):
+        return [_clean_marshal(x) for x in o]
+    elif isinstance(o, tuple):
+        return [_clean_marshal(x) for x in o]
+    elif isinstance(o, dict):
+        if "co_code" in o:
+            pass
+
+        return {x: _clean_marshal(y) for x, y in o.items()}
+    elif isinstance(o, set):
+        return [_clean_marshal(x) for x in o]
+    elif isinstance(o, frozenset):
+        return [_clean_marshal(x) for x in o]
+    elif isinstance(o, bytes):
+        return o.hex()
+    else:
+        return o
+
+
+def read_marshal(*args, **kwargs):
+    return _clean_marshal(_read_marshal(*args, **kwargs))
 
 
 def tempfd():
