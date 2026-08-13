@@ -839,16 +839,37 @@ def _read_pgp(buf, fake=None):
                     data["key-id"] = buf.rh(8)
 
                     algorithm = buf.ru8()
-                    data["public-key-algorithm"] = unraw(algorithm, 1, PGP_PUBLIC_KEYS)
+                    data["public-key-algorithm"] = unraw(algorithm, 1, PGP_PUBLIC_KEYS, True)
+                case 6:
+                    buf.pasunit(buf.ru8())
 
+                    data["key-version"] = buf.ru8()
+                    data["key-id"] = buf.rh({4: 20, 6: 32}.get(data["key-version"], buf.unit))
+
+                    buf.sapunit()
+
+                    algorithm = buf.ru8()
+                    data["public-key-algorithm"] = unraw(algorithm, 1, PGP_PUBLIC_KEYS, True)
                 case _:
                     packet["unknown"] = True
 
             match algorithm:
-                case 0x01:
+                case 0x01 | 0x02:
                     data["session-key"] = {"c": read_pgp_mpi(buf)}
+                case 0x19 | 0x1a:
+                    data["session-key"] = {}
+                    data["session-key"]["public-key"] = buf.rh(32 if algorithm == 0x19 else 56)
+
+                    buf.pasunit(buf.ru8())
+
+                    if data["version"] == 3:
+                        data["session-key"]["algorithm"] = unraw(buf.ru8(), 1, PGP_CIPHERS, True)
+
+                    data["session-key"]["key"] = buf.rh(buf.unit)
+
+                    buf.sapunit()
                 case _:
-                    data["session-key"] = {"unknown": True}
+                    data["session-key"] = {"raw": buf.rh(buf.unit), "unknown": True}
         case 0x02:
             packet["tag"] = "Signature"
             data["version"] = buf.ru8()
@@ -1092,6 +1113,14 @@ def _read_pgp(buf, fake=None):
 
             match data["version"]:
                 case 0x01:
+                    data["encrypted-length"] = buf.unit
+                    buf.skipunit()
+                case 0x02:
+                    data["algorithm"] = unraw(buf.ru8(), 1, PGP_CIPHERS, True)
+                    data["aead"] = unraw(buf.ru8(), 1, PGP_AEADS, True)
+                    data["chunk-size"] = 1 << (buf.ru8() + 6)
+                    data["salt"] = buf.rh(32)
+
                     data["encrypted-length"] = buf.unit
                     buf.skipunit()
                 case _:

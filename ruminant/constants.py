@@ -493,6 +493,10 @@ PGP_PUBLIC_KEYS = {
     18: "ECDH",
     19: "ECDSA",
     22: "EdDSALegacy",
+    25: "X25519",
+    26: "X448",
+    27: "Ed25519",
+    28: "Ed448",
 }
 
 PGP_CIPHERS = {
