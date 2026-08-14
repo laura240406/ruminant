@@ -851,6 +851,8 @@ def _read_pgp(buf, fake=None):
             match algorithm:
                 case 0x01 | 0x02:
                     data["session-key"] = {"c": read_pgp_mpi(buf)}
+                case 0x12:
+                    data["session-key"] = {"point": read_pgp_mpi(buf), "key": buf.rh(buf.ru8())}
                 case 0x19 | 0x1a:
                     data["session-key"] = {}
                     data["session-key"]["public-key"] = buf.rh(32 if algorithm == 0x19 else 56)
@@ -1134,6 +1136,16 @@ def _read_pgp(buf, fake=None):
                     buf.skipunit()
                 case _:
                     packet["unknown"] = True
+        case 0x14:
+            # https://datatracker.ietf.org/doc/html/draft-ietf-openpgp-rfc4880bis-05#page-62
+            packet["tag"] = "AEAD Encrypted Data Packet"
+
+            data["cipher"] = unraw(buf.ru8(), 1, PGP_CIPHERS, True)
+            data["aead"] = unraw(buf.ru8(), 1, PGP_AEADS, True)
+            data["chunk-size"] = 1 << (buf.ru8() + 6)
+
+            data["encrypted-length"] = buf.unit
+            buf.skipunit()
         case _:
             packet["tag"] = f"Unknown (0x{hex(tag)[2:].zfill(2)})"
             packet["unknown"] = True

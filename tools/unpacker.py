@@ -4,6 +4,7 @@ import os
 import lzma
 import sys
 
+
 def unpack(h, content):
     directory = os.path.join(tempfile.gettempdir(), "ruminant-" + h)
 
