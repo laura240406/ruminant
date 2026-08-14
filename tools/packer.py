@@ -1,6 +1,7 @@
 import base64
 import os
 import lzma
+import hashlib
 
 base = os.path.join(os.path.dirname(os.path.dirname(__file__)), "ruminant")
 
@@ -20,6 +21,7 @@ for file in files:
         content += len(section).to_bytes(3, "little") + section
 
 content = lzma.compress(content, preset=9 | lzma.PRESET_EXTREME)
+content_hash = hashlib.sha256(content).hexdigest()
 
 with open(os.path.join(os.path.dirname(__file__), "unpacker.py"), "r") as f:
-    print(f.read() + '\nunpack("' + base64.b85encode(content).decode("utf-8") + '")')
+    print(f.read() + '\nunpack("' + content_hash + '","' + base64.b85encode(content).decode("utf-8") + '")')
