@@ -1806,6 +1806,9 @@ def unpack_snappy(blob):
 
 
 def expand_ranges(s: Any, lower: int, upper: int) -> list[int]:
+    if len(s.strip()) == 0:
+        return []
+
     parts = cast(str, s).split(",")
 
     ranges: list[int] = []
