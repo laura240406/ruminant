@@ -1878,3 +1878,72 @@ class AppleDoubleModule(module.RuminantModule):
         self.buf.seek(max_offset)
 
         return meta
+
+
+@module.register
+class MicrosoftPrinterSettingsModule(module.RuminantModule):
+    desc = "Microsoft printer settings files."
+
+    @staticmethod
+    def identify(buf: Buf, ctx={}) -> bool:
+        if buf.available() < 220:
+            return False
+
+        with buf:
+            buf.seek(64)
+            if buf.ru16l() != 0x0401:
+                return False
+
+            buf.seek(68)
+            if buf.ru16l() != 220:
+                return False
+
+            return buf.size() >= buf.ru16l() + 220
+
+    def chew(self) -> ruminant_types.JSON:
+        meta: dict = {}
+        meta["type"] = "printer-setting"
+
+        meta["device-name"] = self.buf.rs(64, "utf-16le")
+        meta["spec-version"] = self.buf.ru16l()
+        meta["driver-version"] = self.buf.ru16l()
+        meta["size"] = self.buf.ru16l()
+        meta["driver-extra-size"] = self.buf.ru16l()
+        meta["fields"] = self.buf.ru32l()
+        meta["orientation"] = self.buf.ri16l()
+        meta["paper-size"] = self.buf.ri16l()
+        meta["paper-length"] = self.buf.ri16l()
+        meta["paper-width"] = self.buf.ri16l()
+        meta["scale"] = self.buf.ri16l()
+        meta["copies"] = self.buf.ri16l()
+        meta["default-source"] = self.buf.ri16l()
+        meta["print-quality"] = self.buf.ri16l()
+        meta["color"] = self.buf.ri16l()
+        meta["duplex"] = self.buf.ri16l()
+        meta["y-resolution"] = self.buf.ri16l()
+        meta["tt-option"] = self.buf.ri16l()
+        meta["collate"] = self.buf.ri16l()
+        meta["form-name"] = self.buf.rs(64, "utf-16le")
+        meta["log-pixels"] = self.buf.ru16l()
+        meta["bits-per-pel"] = self.buf.ru32l()
+        meta["pels-width"] = self.buf.ru32l()
+        meta["pels-height"] = self.buf.ru32l()
+        meta["display-flags"] = self.buf.ru32l()
+        meta["display-frequency"] = self.buf.ru32l()
+        meta["icm-method"] = self.buf.ru32l()
+        meta["icm-intent"] = self.buf.ru32l()
+        meta["media-type"] = self.buf.ru32l()
+        meta["dither-type"] = self.buf.ru32l()
+        meta["reserved1"] = self.buf.ru32l()
+        meta["reserved2"] = self.buf.ru32l()
+        meta["panning-width"] = self.buf.ru32l()
+        meta["panning-height"] = self.buf.ru32l()
+
+        self.buf.pasunit(meta["driver-extra-size"])
+
+        with self.buf.subunit():
+            meta["driver-extra"] = chew(self.buf, blob_mode=True)
+
+        self.buf.sapunit()
+
+        return meta
