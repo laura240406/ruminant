@@ -25,6 +25,8 @@ def unpack(h, content):
                 f.write(section)
 
     sys.path.insert(0, directory)
+
+    sys.path.remove(os.path.abspath(os.path.dirname(sys.argv[0])))
     from ruminant.main import main
 
     sys.exit(main(True))
