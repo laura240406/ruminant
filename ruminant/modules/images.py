@@ -2782,12 +2782,20 @@ class DicomModule(module.RuminantModule):
                 if vr == "DA":
                     tag["value"] = datetime.datetime.strptime(tag["value"], "%Y%m%d").strftime("%Y-%m-%d")
                 elif vr == "DT":
+                    tag["value"] = tag["value"].strip()
                     try:
                         tag["value"] = datetime.datetime.strptime(tag["value"], "%Y%m%d%H%M%S.%f%z").strftime(
                             "%Y-%m-%d %H:%M:%S"
                         )
                     except ValueError:
-                        tag["value"] = datetime.datetime.strptime(tag["value"], "%Y%m%d%H%M%S").strftime("%Y-%m-%d %H:%M:%S")
+                        try:
+                            tag["value"] = datetime.datetime.strptime(tag["value"], "%Y%m%d%H%M%S").strftime(
+                                "%Y-%m-%d %H:%M:%S"
+                            )
+                        except ValueError:
+                            tag["value"] = datetime.datetime.strptime(tag["value"], "%Y%m%d%H%M%S.%f").strftime(
+                                "%Y-%m-%d %H:%M:%S"
+                            )
                 elif vr == "TM":
                     if "." in tag["value"]:
                         main, frac = tag["value"].split(".", 1)
