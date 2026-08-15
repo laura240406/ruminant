@@ -2,12 +2,11 @@ from .. import module
 from ..buf import Buf
 
 import traceback
-import os
+from contextvars import ContextVar
 
+state_stack: ContextVar[dict | None] = ContextVar("state_stack", default=None)
 to_extract: list[int] = []
 extract_all = False
-shallow = False
-blob_id = 0
 
 
 class EntryModule(module.RuminantModule):
@@ -20,12 +19,12 @@ class EntryModule(module.RuminantModule):
         self.extra_ctx = extra_ctx
 
     def chew(self):
-        global blob_id
+        state = state_stack.get()
 
         meta = {}
-        meta["blob-id"] = blob_id
-        my_blob_id = blob_id
-        blob_id += 1
+        meta["blob-id"] = state["blob-id"]
+        my_blob_id = state["blob-id"]
+        state["blob-id"] += 1
 
         offset = self.buf.tell()
 
@@ -94,38 +93,33 @@ class EntryModule(module.RuminantModule):
         if not matched:
             meta |= {"type": "unknown", "length": self.buf.size()}
 
-        if extract_all and my_blob_id > 0:
-            to_extract.append((
-                my_blob_id,
-                os.path.join("blobs", f"{str(my_blob_id).zfill(8)}.bin"),
-            ))
-
-        for entry in to_extract[:]:
-            k, v = entry
-
-            if k == my_blob_id:
-                to_extract.remove(entry)
-
-                with self.buf:
-                    self.buf.resetunit()
-                    self.buf.seek(offset)
-
-                    with open(v, "wb") as file:
-                        length = meta["length"] if meta["type"] != "nested" else meta["segments"][0]["length"]
-
-                        while length:
-                            blob = self.buf.read(min(1 << 24, length))
-                            file.write(blob)
-                            length -= len(blob)
-
-                            if len(blob) == 0:
-                                break
+        state["blob-callback"](my_blob_id, self.buf, offset, meta)
 
         return meta
 
 
-def chew(blob, walk_mode=False, blob_mode=False, flat=False, extra_ctx={}):
-    return EntryModule(walk_mode, blob_mode or (shallow and blob_id), flat, extra_ctx, Buf.of(blob)).chew()
+def chew(
+    blob,
+    walk_mode=False,
+    blob_mode=False,
+    flat=False,
+    extra_ctx={},
+    shallow=False,
+    blob_callback=lambda *x: None,
+    parameters={},
+):
+    first = state_stack.get() is None
+
+    if first:
+        token = state_stack.set({"blob-id": 0, "blob-callback": blob_callback, "parameters": parameters, "parameter-index": 0})
+
+    try:
+        return EntryModule(
+            walk_mode, blob_mode or (shallow and state_stack.get()["blob-id"]), flat, extra_ctx, Buf.of(blob)
+        ).chew()
+    finally:
+        if first:
+            state_stack.reset(token)
 
 
 from . import (  # noqa: F401,E402

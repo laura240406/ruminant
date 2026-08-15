@@ -1,4 +1,4 @@
-from . import modules, module, constants, utils, secrets
+from . import modules, module, constants, utils
 from .buf import Buf
 import argparse
 import sys
@@ -8,6 +8,7 @@ import os
 import re
 import urllib.request
 from urllib.parse import urlparse, urlunparse
+from typing import Callable
 
 # can we use mmap?
 use_mmap = "RUMINANT_NO_MMAP" not in os.environ
@@ -40,6 +41,41 @@ def walk_helper(path, filename_regex):
 
 
 slim = False
+to_extract: list[tuple[int, str]] = []
+extract_all: bool = False
+parameters: dict = {}
+
+
+def blob_callback(to_extract: list[tuple[int, str]], extract_all: bool) -> Callable[[int, Buf, int, dict], None]:
+    def f(blob_id: int, buf: Buf, offset: int, meta: dict):
+        if extract_all and blob_id > 0:
+            to_extract.append((
+                blob_id,
+                os.path.join("blobs", f"{str(blob_id).zfill(8)}.bin"),
+            ))
+
+        for entry in to_extract[:]:
+            k, v = entry
+
+            if k == blob_id:
+                to_extract.remove(entry)
+
+                with buf:
+                    buf.resetunit()
+                    buf.seek(offset)
+
+                    with open(v, "wb") as file:
+                        length = meta["length"] if meta["type"] != "nested" else meta["segments"][0]["length"]
+
+                        while length:
+                            blob = buf.read(min(1 << 24, length))
+                            file.write(blob)
+                            length -= len(blob)
+
+                            if len(blob) == 0:
+                                break
+
+    return f
 
 
 # process a file
@@ -56,14 +92,30 @@ def process(file, walk):
 
             with mm:
                 if slim:
-                    return json.dumps(modules.chew(mm), separators=(",", ":"), ensure_ascii=False)
+                    return json.dumps(
+                        modules.chew(mm, blob_callback=blob_callback(to_extract, extract_all), parameters=parameters),
+                        separators=(",", ":"),
+                        ensure_ascii=False,
+                    )
                 else:
-                    return json.dumps(modules.chew(mm), indent=2, ensure_ascii=False)
+                    return json.dumps(
+                        modules.chew(mm, blob_callback=blob_callback(to_extract, extract_all), parameters=parameters),
+                        indent=2,
+                        ensure_ascii=False,
+                    )
         else:
             if slim:
-                return json.dumps(modules.chew(file), separators=(",", ":"), ensure_ascii=False)
+                return json.dumps(
+                    modules.chew(file, blob_callback=blob_callback(to_extract, extract_all), parameters=parameters),
+                    separators=(",", ":"),
+                    ensure_ascii=False,
+                )
             else:
-                return json.dumps(modules.chew(file), indent=2, ensure_ascii=False)
+                return json.dumps(
+                    modules.chew(file, blob_callback=blob_callback(to_extract, extract_all), parameters=parameters),
+                    indent=2,
+                    ensure_ascii=False,
+                )
 
     # we do a binwalk style walk now
     buf = Buf(file)
@@ -75,7 +127,7 @@ def process(file, walk):
 
         with buf:
             try:
-                entry = modules.chew(file, True)
+                entry = modules.chew(file, True, blob_callback=blob_callback(to_extract, extract_all), parameters=parameters)
                 assert entry["type"] != "unknown"
             except Exception:
                 entry = None
@@ -112,7 +164,7 @@ def process(file, walk):
 
     # --extract-blob logic for the walk mode
     for entry in data:
-        for k, v in modules.to_extract:
+        for k, v in to_extract:
             if k == entry["blob-id"]:
                 buf.seek(entry["offset"])
                 with open(v, "wb") as file:
@@ -138,7 +190,7 @@ def process(file, walk):
 
 
 def main(dev=False):
-    global has_tqdm, args
+    global has_tqdm, args, extract_all
 
     if sys.platform == "linux":
         # register SIGUSR1 handler that dumps the stacktrace to stderr
@@ -290,7 +342,7 @@ def main(dev=False):
         modules.shallow = True
 
     if args.extract_all:
-        modules.extract_all = True
+        extract_all = True
         if not os.path.isdir("blobs"):
             os.mkdir("blobs")
 
@@ -298,7 +350,7 @@ def main(dev=False):
         for k, v in args.extract:
             # register blobs to extract
             try:
-                modules.to_extract.append((int(k), v))
+                to_extract.append((int(k), v))
             except ValueError:
                 print(f"Cannot parse blob ID {k}", file=sys.stderr)
                 exit(1)
@@ -306,7 +358,7 @@ def main(dev=False):
     if args.parameter is not None:
         for k, v in args.parameter:
             # register parameter
-            secrets.set(k, v)
+            parameters[k] = v
 
     if args.parameter_file is not None:
         for fn in args.parameter_file:
@@ -316,7 +368,7 @@ def main(dev=False):
                 # read json from file and register parameters
                 with open(fn, "r") as f:
                     for k, v in json.load(f).items():
-                        secrets.set(k, v)
+                        parameters[k] = v
             except Exception:
                 print(f"Cannot open and parse file {fn}", file=sys.stderr)
                 exit(1)
