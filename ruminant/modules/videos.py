@@ -4849,7 +4849,7 @@ class MpegTsModule(module.RuminantModule):
             match desc["tag"]:
                 case 0x48:
                     desc["type"] = "Service Descriptor"
-                    desc["data"]["service-type"] = utils.unraw(buf.ru8(), 1, {1: "Digital TV", 2: "Radio"})
+                    desc["data"]["service-type"] = utils.unraw(buf.ru8(), 1, {1: "Digital TV", 2: "Radio"}, True)
                     desc["data"]["provider"] = buf.rs(buf.ru8())
                     desc["data"]["service"] = buf.rs(buf.ru8())
                 case 0x0a:
@@ -4864,6 +4864,7 @@ class MpegTsModule(module.RuminantModule):
                             2: "Commentary",
                             3: "Karaoke",
                         },
+                        True,
                     )
                 case 0x25 | 0x26:
                     if buf.peek(2) == b"\xff\xff":
@@ -4929,9 +4930,7 @@ class MpegTsModule(module.RuminantModule):
                         }
                         temp = buf.ru16()
                         program["running-status"] = utils.unraw(
-                            (temp >> 13) & 0x07,
-                            1,
-                            {0: "Undefined", 1: "Not running", 4: "Running"},
+                            (temp >> 13) & 0x07, 1, {0: "Undefined", 1: "Not running", 4: "Running"}, True
                         )
                         program["scrambled"] = bool(temp & 0x1000)
                         program["descriptor-length"] = temp & 0x0fff
@@ -4973,8 +4972,9 @@ class MpegTsModule(module.RuminantModule):
                     chunk["data"]["elementary-streams"] = []
                     while buf.unit > 0:
                         es = {}
+                        typ = buf.ru8()
                         es["type"] = utils.unraw(
-                            buf.ru8(),
+                            typ,
                             1,
                             {
                                 2: "MPEG-2 video",
@@ -4983,9 +4983,10 @@ class MpegTsModule(module.RuminantModule):
                                 21: "ID3 metadata",
                                 27: "H.264 video",
                             },
+                            True,
                         )
                         es["pid"] = buf.ru16() & 0x1fff
-                        self.es[es["pid"]] = es["type"]["raw"]
+                        self.es[es["pid"]] = typ
                         es["descriptor-length"] = buf.ru16() & 0x0fff
 
                         buf.pushunit()
@@ -5036,8 +5037,11 @@ class MpegTsModule(module.RuminantModule):
                 slack[pid] = b""
 
             if pusi:
-                offset = self.buf.ru8() + 1
-                self.buf.skip(offset - 1)
+                if self.buf.peek(3) == b"\x00\x00\x01":
+                    offset = 0
+                else:
+                    offset = self.buf.ru8() + 1
+                    self.buf.skip(offset - 1)
 
                 if len(slack[pid]):
                     chunk = self.process(pid, Buf(slack[pid]))
@@ -5076,6 +5080,147 @@ class MpegTsModule(module.RuminantModule):
                     case _:
                         chunk["type"] = "es"
 
+                        buf = Buf(chunk["blob"])
+                        buf.skip(3)
+
+                        chunk["header"] = {}
+                        chunk["header"]["steam-id"] = utils.unraw(
+                            buf.ru8(),
+                            1,
+                            {
+                                0xbd: "Private stream 1",
+                                0xbe: "Padding stream",
+                                0xc0: "MPEG audio stream 0",
+                                0xc1: "MPEG audio stream 1",
+                                0xc2: "MPEG audio stream 2",
+                                0xc3: "MPEG audio stream 3",
+                                0xc4: "MPEG audio stream 4",
+                                0xc5: "MPEG audio stream 5",
+                                0xc6: "MPEG audio stream 6",
+                                0xc7: "MPEG audio stream 7",
+                                0xc8: "MPEG audio stream 8",
+                                0xc9: "MPEG audio stream 9",
+                                0xca: "MPEG audio stream 10",
+                                0xcb: "MPEG audio stream 11",
+                                0xcc: "MPEG audio stream 12",
+                                0xcd: "MPEG audio stream 13",
+                                0xce: "MPEG audio stream 14",
+                                0xcf: "MPEG audio stream 15",
+                                0xd0: "MPEG audio stream 16",
+                                0xd1: "MPEG audio stream 17",
+                                0xd2: "MPEG audio stream 18",
+                                0xd3: "MPEG audio stream 19",
+                                0xd4: "MPEG audio stream 20",
+                                0xd5: "MPEG audio stream 21",
+                                0xd6: "MPEG audio stream 22",
+                                0xd7: "MPEG audio stream 23",
+                                0xd8: "MPEG audio stream 24",
+                                0xd9: "MPEG audio stream 25",
+                                0xda: "MPEG audio stream 26",
+                                0xdb: "MPEG audio stream 27",
+                                0xdc: "MPEG audio stream 28",
+                                0xdd: "MPEG audio stream 29",
+                                0xde: "MPEG audio stream 30",
+                                0xdf: "MPEG audio stream 31",
+                                0xe0: "MPEG video stream 0",
+                                0xe1: "MPEG video stream 1",
+                                0xe2: "MPEG video stream 2",
+                                0xe3: "MPEG video stream 3",
+                                0xe4: "MPEG video stream 4",
+                                0xe5: "MPEG video stream 5",
+                                0xe6: "MPEG video stream 6",
+                                0xe7: "MPEG video stream 7",
+                                0xe8: "MPEG video stream 8",
+                                0xe9: "MPEG video stream 9",
+                                0xea: "MPEG video stream 10",
+                                0xeb: "MPEG video stream 11",
+                                0xec: "MPEG video stream 12",
+                                0xed: "MPEG video stream 13",
+                                0xee: "MPEG video stream 14",
+                                0xef: "MPEG video stream 15",
+                            },
+                            True,
+                        )
+                        chunk["header"]["packet-length"] = buf.ru16()
+                        chunk["header"]["flags"] = {}
+                        chunk["header"]["flags"]["fixed"] = buf.rb(2)
+                        chunk["header"]["flags"]["scrambling-control"] = buf.rb(2)
+                        chunk["header"]["flags"]["priority"] = buf.rb(1)
+                        chunk["header"]["flags"]["data-alignment-indicator"] = buf.rb(1)
+                        chunk["header"]["flags"]["copyright"] = buf.rb(1)
+                        chunk["header"]["flags"]["original"] = buf.rb(1)
+                        chunk["header"]["flags"]["pts-present"] = buf.rb(1)
+                        chunk["header"]["flags"]["dts-present"] = buf.rb(1)
+                        chunk["header"]["flags"]["escr-present"] = buf.rb(1)
+                        chunk["header"]["flags"]["es-rate-present"] = buf.rb(1)
+                        chunk["header"]["flags"]["dsm-trick-mode-present"] = buf.rb(1)
+                        chunk["header"]["flags"]["additional-copy-info-present"] = buf.rb(1)
+                        chunk["header"]["flags"]["crc-present"] = buf.rb(1)
+                        chunk["header"]["flags"]["extension-present"] = buf.rb(1)
+                        chunk["header"]["optional-length"] = buf.ru8()
+
+                        buf.pasunit(chunk["header"]["optional-length"])
+
+                        chunk["header"]["optional"] = {}
+
+                        if chunk["header"]["flags"]["pts-present"]:
+                            chunk["header"]["optional"]["pts"] = int.from_bytes(buf.read(5), "big")
+
+                        if chunk["header"]["flags"]["dts-present"]:
+                            chunk["header"]["optional"]["dts"] = int.from_bytes(buf.read(5), "big")
+
+                        if buf.unit:
+                            chunk["header"]["optional"]["rest"] = buf.rh(buf.unit)
+
+                        buf.sapunit()
+                        chunk["header"]["length"] = buf.tell()
+
+        meta["streams"] = {}
+        for pid in self.es:
+            meta["streams"][pid] = {}
+
+            ess = []
+            for chunk in meta["chunks"]:
+                if chunk["type"] == "es" and chunk["pid"] == pid:
+                    ess.append(chunk)
+
+            ranges = utils.expand_ranges(secrets.get_parameter("0", meta["streams"][pid], "ranges"), 0, len(ess))
+
+            meta["streams"][pid]["samples"] = {}
+            for index in ranges:
+                sample: dict = {}
+
+                match self.es[pid]:
+                    case 27:
+                        buf = Buf(ess[index]["blob"][ess[index]["header"]["length"] :])
+
+                        offsets = []
+                        while buf.available() > 3:
+                            while buf.available() > 3 and buf.peek(3) != b"\x00\x00\x01":
+                                buf.skip(1)
+
+                            offsets.append(buf.tell())
+                            buf.skip(3)
+
+                        offsets.append(buf.tell())
+                        buf.seek(0)
+
+                        sample["nalus"] = []
+                        if len(offsets) > 1:
+                            for i in range(0, len(offsets) - 2):
+                                buf.seek(offsets[i] + 3)
+                                buf.pasunit(offsets[i + 1] - offsets[i] - 3)
+
+                                sample["nalus"].append(FFMpreg.read_h264_nalu(buf))
+
+                                buf.sapunit()
+                    case _:
+                        sample["blob"] = chew(ess[index]["blob"])
+                        meta["streams"][pid]["unknown"] = True
+
+                meta["streams"][pid]["samples"][index] = sample
+
+        for chunk in meta["chunks"]:
             del chunk["index"]
             del chunk["blob"]
 
