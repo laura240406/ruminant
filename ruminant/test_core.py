@@ -76,4 +76,4 @@ def main():
             print(f"  {group}: {', '.join(names)}")
 
     print("Done, bye :)")
-    exit(0)
+    exit(0 if success == test_counts else 1)
