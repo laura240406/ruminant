@@ -30,3 +30,6 @@ jobs:
 
       - name: Run Mypy
         run: python3 -m mypy -p ruminant
+
+      - name: Run self test
+        run: ruminant --self-test
