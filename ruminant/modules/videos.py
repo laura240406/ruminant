@@ -2176,6 +2176,8 @@ class IsoModule(module.RuminantModule):
                     atom["data"]["payload"] = self.buf.rs(self.buf.unit)
                 case 0x00000002:
                     atom["data"]["payload"] = self.buf.rs(self.buf.unit, "utf-16")
+                case 0x00000017:
+                    atom["data"]["payload"] = self.buf.rf32()
                 case _:
                     with self.buf.subunit():
                         atom["data"]["payload"] = chew(self.buf)
@@ -2657,7 +2659,7 @@ class IsoModule(module.RuminantModule):
             atom["entries"] = []
             while self.buf.unit:
                 length = self.buf.ru32()
-                i = self.buf.rs(4)
+                i = self.buf.ru32()
                 atom["entries"].append({
                     "id": i,
                     "content": self.read_atom(root_context=i),
