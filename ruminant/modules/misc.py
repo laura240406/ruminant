@@ -9,6 +9,7 @@ import zlib
 import binascii
 import base64
 import json
+import math
 
 
 debug = module.debug
@@ -1735,11 +1736,21 @@ class StlModule(module.RuminantModule):
                 buf.skip(80)
                 triangle_count = buf.ru32l()
                 assert triangle_count > 0
-                return buf.available() >= triangle_count * 50
+                assert buf.available() >= triangle_count * 50
 
                 for i in range(0, triangle_count):
-                    buf.skip(48)
+                    buf.skip(12)
+
+                    for i in range(0, 9):
+                        value = buf.rf32l()
+                        assert not math.isnan(value)
+                        assert not math.isinf(value)
+                        assert value >= -1e6
+                        assert value <= 1e6
+
                     assert buf.ru16l() == 0
+
+                return True
 
         except Exception:
             return False

@@ -937,7 +937,7 @@ class OpenSshPrivateKeyModule(module.RuminantModule):
 class EfiSignatureListModule(module.RuminantModule):
     desc = "EFI signature lists."
 
-    GUIDS = "a5c059a1-94e4-4aa7-87b5-ab155c2bf072"
+    GUIDS = ("a5c059a1-94e4-4aa7-87b5-ab155c2bf072",)
 
     @staticmethod
     def identify(buf: Buf, ctx={}) -> bool:
