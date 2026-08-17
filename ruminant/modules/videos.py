@@ -5184,9 +5184,10 @@ class MpegTsModule(module.RuminantModule):
                 if chunk["type"] == "es" and chunk["pid"] == pid:
                     ess.append(chunk)
 
-            ranges = (
-                utils.expand_ranges(secrets.get_parameter("0", meta["streams"][pid], "ranges"), 0, len(ess)) if len(ess) else []
-            )
+            ranges = utils.expand_ranges(secrets.get_parameter("0", meta["streams"][pid], "ranges"), 0, len(ess) - 1)
+
+            if len(ess) == 0:
+                ranges = []
 
             meta["streams"][pid]["samples"] = {}
             for index in ranges:

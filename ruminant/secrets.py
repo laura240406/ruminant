@@ -24,4 +24,4 @@ def get_parameter(default=None, register_dict=None, register_name=None) -> rumin
         register_dict[register_name] = {"parameter-index": parameter_index, "found": str(parameter_index) in parameters}
 
     state["parameter-index"] += 1
-    return parameters.get(str(parameter_index - 1), default)
+    return parameters.get(str(parameter_index), default)
