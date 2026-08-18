@@ -26,7 +26,11 @@ def unpack(h, content):
 
     sys.path.insert(0, directory)
 
-    sys.path.remove(os.path.abspath(os.path.dirname(sys.argv[0])))
+    try:
+        sys.path.remove(os.path.abspath(os.path.dirname(sys.argv[0])))
+    except Exception:
+        pass
+
     from ruminant.main import main
 
     sys.exit(main(True))
