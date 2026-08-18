@@ -1906,7 +1906,7 @@ class FFMpreg(object):
         return op
 
     @staticmethod
-    def read_ac3_frame(buf):
+    def read_ac3_frame(buf: Buf) -> dict:
         AC3_FRAME_SIZES = [
             [
                 64,
@@ -2030,7 +2030,7 @@ class FFMpreg(object):
             ],
         ]
 
-        frame = {}
+        frame: dict = {}
 
         buf.skip(2)
         frame["crc1"] = buf.ru16()
@@ -2106,6 +2106,70 @@ class FFMpreg(object):
         buf.align()
 
         buf.sapunit()
+
+        return frame
+
+    @staticmethod
+    def read_mp2_frame(buf: Buf) -> dict:
+        frame = {}
+
+        buf.rb(12)
+        frame["version-id"] = buf.rb(1)
+        frame["layer"] = buf.rb(2)
+        frame["protection-bit"] = buf.rb(1)
+        frame["bitrate"] = [
+            [
+                None,
+                8,
+                16,
+                24,
+                32,
+                40,
+                48,
+                56,
+                64,
+                80,
+                96,
+                112,
+                128,
+                144,
+                160,
+                None,
+            ],
+            [
+                None,
+                32,
+                48,
+                56,
+                64,
+                80,
+                96,
+                112,
+                128,
+                160,
+                192,
+                224,
+                256,
+                320,
+                384,
+                None,
+            ],
+        ][frame["version-id"]][buf.rb(4)] * 1000
+        frame["sampling-rate"] = [[22050, 24000, 16000, None], [44100, 48000, 32000, None]][frame["version-id"]][buf.rb(2)]
+        frame["padding-bit"] = buf.rb(1)
+        frame["private-bit"] = buf.rb(1)
+        frame["channel-mode"] = buf.rb(2)
+        frame["mode-extension"] = buf.rb(2)
+        frame["copyright"] = buf.rb(1)
+        frame["original-copy"] = buf.rb(1)
+        frame["emphasis"] = buf.rb(2)
+
+        if frame["protection-bit"] == 0:
+            frame["crc"] = buf.rb(16)
+
+        frame["length"] = (144 * frame["bitrate"] // frame["sampling-rate"]) + frame["padding-bit"]
+
+        buf.skip(frame["length"] - 4)
 
         return frame
 
@@ -4978,6 +5042,18 @@ class MatroskaModule(module.RuminantModule):
                             stream["samples"][index].append(FFMpreg.read_ac3_frame(self.buf))
 
                         self.buf.sapunit()
+                case "A_MPEG/L2":
+                    stream["samples"] = {}
+
+                    for index in ranges:
+                        self.buf.seek(sample_offsets[stream["id"]][index])
+                        self.buf.pasunit(sample_sizes[stream["id"]][index])
+
+                        stream["samples"][index] = []
+                        while self.buf.hasunit():
+                            stream["samples"][index].append(FFMpreg.read_mp2_frame(self.buf))
+
+                        self.buf.sapunit()
                 # BOOK New MKV handler
                 case _:
                     if stream["id"] in codec_privates:
@@ -5261,6 +5337,22 @@ class MpegTsModule(module.RuminantModule):
                     }
                     desc["data"]["composition-page-id"] = buf.ru16()
                     desc["data"]["ancillary-page-id"] = buf.ru16()
+                case 0x05:
+                    desc["type"] = "Registration Descriptor"
+                    desc["data"]["type"] = buf.rs(4)
+
+                    if buf.hasunit():
+                        desc["data"]["rest"] = buf.rh(buf.unit)
+                case 0x7f:
+                    desc["type"] = "Extension Descriptor"
+
+                    typ = buf.ru8()
+                    match typ:
+                        case _:
+                            desc["data"]["type"] = f"Unknown (0x{hex(typ)[2:].zfill(2)})"
+                            desc["data"]["payload"] = buf.rh(buf.unit)
+                            desc["unknown"] = True
+                # BOOK New MPEG-TS descriptor
                 case _:
                     desc["payload"] = buf.rh(buf.unit)
                     desc["unknown"] = True
@@ -5638,6 +5730,12 @@ class MpegTsModule(module.RuminantModule):
                             case _:
                                 sample["blob"] = chew(ess[index]["blob"])
                                 meta["streams"][pid]["unknown"] = True
+                    case 3:
+                        buf = Buf(ess[index]["blob"][ess[index]["header"]["length"] :])
+
+                        sample["frames"] = []
+                        while buf.hasunit():
+                            sample["frames"].append(FFMpreg.read_mp2_frame(buf))
                     case _:
                         sample["blob"] = chew(ess[index]["blob"])
                         meta["streams"][pid]["unknown"] = True
