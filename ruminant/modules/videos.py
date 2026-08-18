@@ -204,6 +204,7 @@ class FFMpreg(object):
         0x1e: "RESERVED",
         0x1f: "RESERVED",
     }
+    # BOOK New FFMpreg constant
 
     @staticmethod
     def read_h264_scaling_list(buf, count):
@@ -672,6 +673,7 @@ class FFMpreg(object):
 
                 buf.align()
             case "Supplemental enhancement information":
+                # BOOK New FFMpreg H.264 SEI
                 t = 0
                 while True:
                     b = buf.ru8()
@@ -855,8 +857,8 @@ class FFMpreg(object):
 
         obu["length"] = length
 
+        # BOOK New FFMpreg AV1 OBU
         buf.pasunit(length)
-
         match obu["type"]:
             case "SEQUENCE_HEADER":
                 # https://aomediacodec.github.io/av1-spec/#sequence-header-obu-syntax
@@ -1273,6 +1275,7 @@ class FFMpreg(object):
         nal["nuh-layer-id"] = buf.rb(6)
         nal["nuh-temporal-id-plus-one"] = buf.rb(3)
 
+        # BOOK New FFMpreg H.265 NAL
         match nal["unit-type"]:
             case "PREFIX_SEI_NUT" | "SUFFIX_SEI_NUT":
                 nal["seis"] = []
@@ -1769,6 +1772,7 @@ class FFMpreg(object):
         nal["unit-type"] = utils.unraw(buf.rb(5), 1, FFMpreg.H266_NAL_UNIT_TYPES, True)
         nal["nuh-temporal-id-plus-one"] = buf.rb(3)
 
+        # BOOK New FFMpreg H.266 NAL
         match nal["unit-type"]:
             case "AUD_NUT":
                 nal["irap-or-gdr-flag"] = buf.rb(1)
@@ -1795,6 +1799,7 @@ class FFMpreg(object):
             obu["mlayer-id"] = buf.rb(3)
             obu["xlayer-id"] = buf.rb(5)
 
+        # BOOK New FFMpreg AV2 OBU
         match obu["type"]:
             case "TEMPORAL_DELIMITER":
                 pass
@@ -1806,6 +1811,7 @@ class FFMpreg(object):
 
     @staticmethod
     def read_dvbsub(buf: Buf) -> dict:
+        # BOOK New FFMpreg DVBSUB type
         op = {}
 
         buf.skip(1)
@@ -2102,6 +2108,8 @@ class FFMpreg(object):
         buf.sapunit()
 
         return frame
+
+    # BOOK New FFMpreg method
 
 
 @module.register
@@ -3433,6 +3441,7 @@ class IsoModule(module.RuminantModule):
         elif typ in ("hint", "cdsc", "font", "hind", "vdep", "vplx", "subt", "cdep"):
             atom["data"]["track-id"] = self.buf.ru32()
         # video sample boxes
+        # BOOK New MP4 video box
         elif typ in ("avc1", "hvc1", "vp09", "encv", "av01", "hev1", "vvc1", "h263", "mp4v"):
             atom["data"]["reserved1"] = self.buf.rh(6)
             atom["data"]["data_reference_index"] = self.buf.ru16()
@@ -3453,6 +3462,7 @@ class IsoModule(module.RuminantModule):
 
             self.read_more(atom)
         # audio sample boxes
+        # BOOK New MP4 audio box
         elif typ in (
             "samr",
             "sawb",
@@ -3499,7 +3509,6 @@ class IsoModule(module.RuminantModule):
                 if typ != "owma":
                     self.read_more(atom)
         elif typ in ("lpcm", "beam"):
-            # TODO
             pass
         elif typ == "mdat":
             with self.buf.subunit():
@@ -3790,6 +3799,7 @@ class IsoModule(module.RuminantModule):
                         data["samples"][index].append(FFMpreg.read_ac3_frame(self.buf))
 
                     self.buf.sapunit()
+            # BOOK New MP4 handler
             case _:
                 ranges = utils.expand_ranges(secrets.get_parameter("0", data, "ranges"), 0, len(sample_to_offset) - 1)
                 data["samples"] = {}
@@ -3804,6 +3814,7 @@ class IsoModule(module.RuminantModule):
         return data
 
     def process_heif_picture(self, codec, picture):
+        # BOOK New MP4 HEIF handler
         match codec:
             case "av1C":
                 picture["obus"] = []
@@ -4967,6 +4978,7 @@ class MatroskaModule(module.RuminantModule):
                             stream["samples"][index].append(FFMpreg.read_ac3_frame(self.buf))
 
                         self.buf.sapunit()
+                # BOOK New MKV handler
                 case _:
                     if stream["id"] in codec_privates:
                         with self.buf:
@@ -5575,6 +5587,7 @@ class MpegTsModule(module.RuminantModule):
             for index in ranges:
                 sample: dict = {}
 
+                # BOOK New MPEG-TS handler
                 match self.es[pid][0]:
                     case 27:
                         buf = Buf(ess[index]["blob"][ess[index]["header"]["length"] :])
@@ -6061,7 +6074,7 @@ class SwfModule(module.RuminantModule):
         return ct
 
     def read_any_filter(self):
-        # TODO: https://www.m2osw.com/swf_struct_any_filter
+        # https://www.m2osw.com/swf_struct_any_filter
 
         filt = {}
         typ = self.buf.ru8()
