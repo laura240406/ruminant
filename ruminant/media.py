@@ -2159,4 +2159,104 @@ class FFMpreg(object):
 
         return frame
 
+    @staticmethod
+    def read_mp3_frame(buf: Buf) -> dict:
+        frame = {}
+
+        buf.rb(11)
+        frame["version"] = utils.unraw(
+            buf.rb(2),
+            1,
+            {0b00: "MPEG-2.5", 0b10: "MPEG-2", 0b11: "MPEG-1"},
+            True,
+        )
+        frame["layer"] = utils.unraw(buf.rb(2), 1, {0b01: "Layer III"}, True)
+        frame["error-protection"] = buf.rb(1) == 0
+        frame["bitrate"] = {
+            "MPEG-1": [
+                None,
+                32,
+                40,
+                48,
+                56,
+                64,
+                80,
+                96,
+                112,
+                128,
+                160,
+                192,
+                224,
+                256,
+                320,
+                -1,
+            ],
+            "MPEG-2": [
+                None,
+                8,
+                16,
+                24,
+                32,
+                40,
+                48,
+                56,
+                64,
+                80,
+                96,
+                112,
+                128,
+                144,
+                160,
+                -1,
+            ],
+            "MPEG-2.5": [
+                None,
+                8,
+                16,
+                24,
+                32,
+                40,
+                48,
+                56,
+                64,
+                80,
+                96,
+                112,
+                128,
+                144,
+                160,
+                -1,
+            ],
+        }[frame["version"]][buf.rb(4)]
+        frame["frequency"] = {
+            "MPEG-1": [44100, 48000, 32000, -1],
+            "MPEG-2": [22050, 24000, 16000, -1],
+            "MPEG-2.5": [11025, 12000, 8000, -1],
+        }[frame["version"]][buf.rb(2)]
+        frame["padding"] = buf.rb(1)
+        frame["private"] = buf.rb(1)
+        frame["mode"] = utils.unraw(
+            buf.rb(2),
+            1,
+            {
+                0b00: "Stereo",
+                0b01: "Joint Stereo",
+                0b10: "Dual Channel",
+                0b11: "Single Channel",
+            },
+            True,
+        )
+        frame["mode-extension"] = buf.rb(2)
+        frame["copyrighted"] = bool(buf.rb(1))
+        frame["original"] = bool(buf.rb(1))
+        frame["emphasis"] = buf.rb(2)
+
+        buf.skip(
+            ((144 if frame["version"] == "MPEG-1" else 72) * frame["bitrate"] * 1000) // frame["frequency"]
+            + frame["padding"]
+            - 4
+        )
+
+        return frame
+
     # BOOK New FFMpreg method

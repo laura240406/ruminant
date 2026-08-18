@@ -3301,6 +3301,7 @@ class MpegTsModule(module.RuminantModule):
                             {
                                 2: "MPEG-2 video",
                                 3: "MPEG-1 audio",
+                                4: "MPEG-2 audio",
                                 6: "Private data",
                                 15: "AAC audio",
                                 21: "ID3 metadata",
@@ -3577,6 +3578,12 @@ class MpegTsModule(module.RuminantModule):
                         sample["frames"] = []
                         while buf.hasunit():
                             sample["frames"].append(FFMpreg.read_mp2_frame(buf))
+                    case 4:
+                        buf = Buf(ess[index]["blob"][ess[index]["header"]["length"] :])
+
+                        sample["frames"] = []
+                        while buf.hasunit():
+                            sample["frames"].append(FFMpreg.read_mp3_frame(buf))
                     case _:
                         sample["blob"] = chew(ess[index]["blob"])
                         meta["streams"][pid]["unknown"] = True

@@ -1,6 +1,7 @@
 from .. import module, utils, ruminant_types
 from ..buf import Buf
 from . import chew
+from ..media import FFMpreg
 import zlib
 import json
 
@@ -519,105 +520,10 @@ class Mp3Module(module.RuminantModule):
 
         meta["frames"] = []
         while Mp3Module.identify(self.buf, {}):
-            frame = {}
-
-            self.buf.rb(11)
-            frame["version"] = utils.unraw(
-                self.buf.rb(2),
-                1,
-                {0b00: "MPEG-2.5", 0b10: "MPEG-2", 0b11: "MPEG-1"},
-                True,
-            )
-            frame["layer"] = utils.unraw(self.buf.rb(2), 1, {0b01: "Layer III"}, True)
-            frame["error-protection"] = self.buf.rb(1) == 0
-            frame["bitrate"] = {
-                "MPEG-1": [
-                    None,
-                    32,
-                    40,
-                    48,
-                    56,
-                    64,
-                    80,
-                    96,
-                    112,
-                    128,
-                    160,
-                    192,
-                    224,
-                    256,
-                    320,
-                    -1,
-                ],
-                "MPEG-2": [
-                    None,
-                    8,
-                    16,
-                    24,
-                    32,
-                    40,
-                    48,
-                    56,
-                    64,
-                    80,
-                    96,
-                    112,
-                    128,
-                    144,
-                    160,
-                    -1,
-                ],
-                "MPEG-2.5": [
-                    None,
-                    8,
-                    16,
-                    24,
-                    32,
-                    40,
-                    48,
-                    56,
-                    64,
-                    80,
-                    96,
-                    112,
-                    128,
-                    144,
-                    160,
-                    -1,
-                ],
-            }[frame["version"]][self.buf.rb(4)]
-            frame["frequency"] = {
-                "MPEG-1": [44100, 48000, 32000, -1],
-                "MPEG-2": [22050, 24000, 16000, -1],
-                "MPEG-2.5": [11025, 12000, 8000, -1],
-            }[frame["version"]][self.buf.rb(2)]
-            frame["padding"] = self.buf.rb(1)
-            frame["private"] = self.buf.rb(1)
-            frame["mode"] = utils.unraw(
-                self.buf.rb(2),
-                1,
-                {
-                    0b00: "Stereo",
-                    0b01: "Joint Stereo",
-                    0b10: "Dual Channel",
-                    0b11: "Single Channel",
-                },
-                True,
-            )
-            frame["mode-extension"] = self.buf.rb(2)
-            frame["copyrighted"] = bool(self.buf.rb(1))
-            frame["original"] = bool(self.buf.rb(1))
-            frame["emphasis"] = self.buf.rb(2)
-
-            self.buf.skip(
-                ((144 if frame["version"] == "MPEG-1" else 72) * frame["bitrate"] * 1000) // frame["frequency"]
-                + frame["padding"]
-                - 4
-            )
-
-            meta["frames"].append(frame)
+            meta["frames"].append(FFMpreg.read_mp3_frame(self.buf))
 
         if self.buf.available() >= 128 and self.buf.peek(3) == b"TAG":
+            # ID3v1 footer
             self.buf.skip(3)
 
             meta["footer"] = {}
