@@ -3777,6 +3777,19 @@ class IsoModule(module.RuminantModule):
                     self.buf.seek(sample_to_offset[index])
                     with self.buf.sub(sample_sizes[index]):
                         data["samples"][index] = chew(self.buf)
+            case "ac-3":
+                ranges = utils.expand_ranges(secrets.get_parameter("0", data, "ranges"), 0, len(sample_to_offset) - 1)
+                data["samples"] = {}
+
+                for index in ranges:
+                    self.buf.seek(sample_to_offset[index])
+                    self.buf.pasunit(sample_sizes[index])
+
+                    data["samples"][index] = []
+                    while self.buf.unit > 0:
+                        data["samples"][index].append(FFMpreg.read_ac3_frame(self.buf))
+
+                    self.buf.sapunit()
             case _:
                 ranges = utils.expand_ranges(secrets.get_parameter("0", data, "ranges"), 0, len(sample_to_offset) - 1)
                 data["samples"] = {}
@@ -4940,6 +4953,18 @@ class MatroskaModule(module.RuminantModule):
                         stream["samples"][index] = []
                         while self.buf.hasunit():
                             stream["samples"][index].append(FFMpreg.read_dvbsub(self.buf))
+
+                        self.buf.sapunit()
+                case "A_AC3":
+                    stream["samples"] = {}
+
+                    for index in ranges:
+                        self.buf.seek(sample_offsets[stream["id"]][index])
+                        self.buf.pasunit(sample_sizes[stream["id"]][index])
+
+                        stream["samples"][index] = []
+                        while self.buf.hasunit():
+                            stream["samples"][index].append(FFMpreg.read_ac3_frame(self.buf))
 
                         self.buf.sapunit()
                 case _:
