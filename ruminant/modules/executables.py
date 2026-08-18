@@ -2726,7 +2726,6 @@ class SpirVModule(module.RuminantModule):
 
 @module.register
 class PycModule(module.RuminantModule):
-    dev = True
     desc = "Python compiled bytecode files."
 
     @staticmethod

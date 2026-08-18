@@ -133,6 +133,7 @@ Ruminant is still in early alpha but it can already process the following file t
 * AppleDouble files
 * H.264 JVT NAL sequence files
 * Microsoft DEVMODEW printerSettings1.bin files
+* PYC python bytecode files
 
 # How do I install it?
 Run `pip3 install ruminant`.
