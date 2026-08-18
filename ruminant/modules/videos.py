@@ -5231,9 +5231,9 @@ class MpegTsModule(module.RuminantModule):
 
                         buf = Buf(chunk["blob"])
 
-                        chunk["header"] = {}
                         if buf.peek(3) == b"\x00\x00\x01":
                             buf.skip(3)
+                            chunk["header"] = {}
 
                             chunk["header"] = {}
                             chunk["header"]["steam-id"] = utils.unraw(
@@ -5326,7 +5326,7 @@ class MpegTsModule(module.RuminantModule):
 
                             buf.sapunit()
 
-                        chunk["header"]["length"] = buf.tell()
+                            chunk["header"]["length"] = buf.tell()
 
         meta["streams"] = {}
         for pid in self.es:
@@ -5334,7 +5334,7 @@ class MpegTsModule(module.RuminantModule):
 
             ess = []
             for chunk in meta["chunks"]:
-                if chunk["type"] == "es" and chunk["pid"] == pid:
+                if chunk["type"] == "es" and chunk["pid"] == pid and "header" in chunk:
                     ess.append(chunk)
 
             ranges = utils.expand_ranges(secrets.get_parameter("0", meta["streams"][pid], "ranges"), 0, len(ess) - 1)
@@ -5380,9 +5380,13 @@ class MpegTsModule(module.RuminantModule):
                                     mode = "sub"
 
                         match mode:
-                            case "sub ":
+                            case "sub":
                                 sample["data-identifier"] = buf.ru8()
                                 sample["subtitle-stream-id"] = buf.ru8()
+
+                                sample["ops"] = []
+                                while buf.hasunit(4):
+                                    sample["ops"].append(FFMpreg.read_dvbsub(buf))
                             case _:
                                 sample["blob"] = chew(ess[index]["blob"])
                                 meta["streams"][pid]["unknown"] = True

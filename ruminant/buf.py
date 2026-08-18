@@ -166,8 +166,8 @@ class Buf(object):
         self.skipunit()
         self.popunit()
 
-    def hasunit(self) -> bool:
-        return (self.unit > 0) if self.unit is not None else self.available() > 0
+    def hasunit(self, m=0) -> bool:
+        return (self.unit > m) if self.unit is not None else self.available() > m
 
     def backup(self) -> ruminant_types.BufBackup:
         """Return the entire internal state."""
