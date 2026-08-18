@@ -3306,6 +3306,7 @@ class MpegTsModule(module.RuminantModule):
                                 15: "AAC audio",
                                 21: "ID3 metadata",
                                 27: "H.264 video",
+                                36: "H.265 video",
                             },
                             True,
                         )
@@ -3584,6 +3585,29 @@ class MpegTsModule(module.RuminantModule):
                         sample["frames"] = []
                         while buf.hasunit():
                             sample["frames"].append(FFMpreg.read_mp3_frame(buf))
+                    case 36:
+                        buf = Buf(ess[index]["blob"][ess[index]["header"]["length"] :])
+
+                        offsets = []
+                        while buf.available() > 3:
+                            while buf.available() > 3 and buf.peek(3) != b"\x00\x00\x01":
+                                buf.skip(1)
+
+                            offsets.append(buf.tell())
+                            buf.skip(3)
+
+                        offsets.append(buf.tell())
+                        buf.seek(0)
+
+                        sample["nalus"] = []
+                        if len(offsets) > 1:
+                            for i in range(0, len(offsets) - 2):
+                                buf.seek(offsets[i] + 3)
+                                buf.pasunit(offsets[i + 1] - offsets[i] - 3)
+
+                                sample["nalus"].append(FFMpreg.read_h265_nalu(buf))
+
+                                buf.sapunit()
                     case _:
                         sample["blob"] = chew(ess[index]["blob"])
                         meta["streams"][pid]["unknown"] = True
