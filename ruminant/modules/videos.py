@@ -1899,6 +1899,210 @@ class FFMpreg(object):
 
         return op
 
+    @staticmethod
+    def read_ac3_frame(buf):
+        AC3_FRAME_SIZES = [
+            [
+                64,
+                64,
+                80,
+                80,
+                96,
+                96,
+                112,
+                112,
+                128,
+                128,
+                160,
+                160,
+                192,
+                192,
+                224,
+                224,
+                256,
+                256,
+                320,
+                320,
+                384,
+                384,
+                448,
+                448,
+                512,
+                512,
+                640,
+                640,
+                768,
+                768,
+                896,
+                896,
+                1024,
+                1024,
+                1152,
+                1152,
+                1280,
+                1280,
+            ],
+            [
+                69,
+                70,
+                87,
+                88,
+                104,
+                105,
+                121,
+                122,
+                139,
+                140,
+                174,
+                175,
+                208,
+                209,
+                243,
+                244,
+                278,
+                279,
+                348,
+                349,
+                417,
+                418,
+                487,
+                488,
+                557,
+                558,
+                696,
+                697,
+                835,
+                836,
+                975,
+                976,
+                1114,
+                1115,
+                1253,
+                1254,
+                1393,
+                1394,
+            ],
+            [
+                96,
+                96,
+                120,
+                120,
+                144,
+                144,
+                168,
+                168,
+                192,
+                192,
+                240,
+                240,
+                288,
+                288,
+                336,
+                336,
+                384,
+                384,
+                480,
+                480,
+                576,
+                576,
+                672,
+                672,
+                768,
+                768,
+                960,
+                960,
+                1152,
+                1152,
+                1344,
+                1344,
+                1536,
+                1536,
+                1728,
+                1728,
+                1920,
+                1920,
+            ],
+        ]
+
+        frame = {}
+
+        buf.skip(2)
+        frame["crc1"] = buf.ru16()
+        fscod = buf.rb(2)
+        frame["fscod"] = utils.unraw(fscod, 1, {0b00: "48 kHz", 0b01: "44.1 kHz", 0b10: "32 kHz"}, True)
+        frame["frmsizecod"] = buf.rb(6)
+        frame["bsid"] = buf.rb(5)
+        frame["bsmod"] = buf.rb(3)
+
+        frame["length"] = AC3_FRAME_SIZES[fscod][frame["frmsizecod"]] * 2
+        buf.pasunit(frame["length"] - 6)
+
+        frame["acmod"] = buf.rb(3)
+
+        if (frame["acmod"] & 0x1) and (frame["acmod"] != 0x1):
+            frame["cmixlev"] = buf.rb(2)
+
+        if frame["acmod"] & 0x4:
+            frame["surmixlev"] = buf.rb(2)
+
+        if frame["acmod"] == 0x2:
+            frame["dsurmod"] = buf.rb(2)
+
+        frame["lfeon"] = buf.rb(1)
+        frame["dialnorm"] = buf.rb(5)
+
+        frame["compre"] = buf.rb(1)
+        if frame["compre"]:
+            frame["compr"] = buf.rb(8)
+
+        frame["langcode"] = buf.rb(1)
+        if frame["langcode"]:
+            frame["langcod"] = buf.rb(8)
+
+        if frame["acmod"] == 0:
+            frame["dialnorm2"] = buf.rb(5)
+
+            frame["compr2e"] = buf.rb(1)
+            if frame["compr2e"]:
+                frame["compr2"] = buf.rb(8)
+
+            frame["langcod2e"] = buf.rb(1)
+            if frame["langcod2e"]:
+                frame["langcod2"] = buf.rb(8)
+
+        frame["audprodie"] = buf.rb(1)
+        if frame["audprodie"]:
+            frame["mixlevel"] = buf.rb(5)
+            frame["roomtyp"] = buf.rb(2)
+
+        if frame["acmod"] == 0:
+            frame["audprodi2e"] = buf.rb(1)
+            if frame["audprodi2e"]:
+                frame["mixlevel2"] = buf.rb(5)
+                frame["roomtyp2"] = buf.rb(2)
+
+        frame["copyrightb"] = buf.rb(1)
+        frame["origbs"] = buf.rb(1)
+
+        frame["timecod1e"] = buf.rb(1)
+        if frame["timecod1e"]:
+            frame["timecod1"] = buf.rb(14)
+
+        frame["timecod2e"] = buf.rb(1)
+        if frame["timecod2e"]:
+            frame["timecod2"] = buf.rb(14)
+
+        frame["addbsie"] = buf.rb(1)
+        if frame["addbsie"]:
+            frame["addbsil"] = buf.rb(6)
+            frame["addbsi"] = [buf.rb(8) for _ in range(frame["addbsil"] + 1)]
+
+        buf.align()
+
+        buf.sapunit()
+
+        return frame
+
 
 @module.register
 class IsoModule(module.RuminantModule):
@@ -5378,6 +5582,8 @@ class MpegTsModule(module.RuminantModule):
                             match desc.get("type"):
                                 case "Subtiltling Descriptor":
                                     mode = "sub"
+                                case "AC-3 Descriptor":
+                                    mode = "ac-3"
 
                         match mode:
                             case "sub":
@@ -5387,6 +5593,10 @@ class MpegTsModule(module.RuminantModule):
                                 sample["ops"] = []
                                 while buf.hasunit(4):
                                     sample["ops"].append(FFMpreg.read_dvbsub(buf))
+                            case "ac-3":
+                                sample["frames"] = []
+                                while buf.hasunit():
+                                    sample["frames"].append(FFMpreg.read_ac3_frame(buf))
                             case _:
                                 sample["blob"] = chew(ess[index]["blob"])
                                 meta["streams"][pid]["unknown"] = True
