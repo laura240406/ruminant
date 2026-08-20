@@ -681,6 +681,7 @@ class FFMpreg(object):
                         0x00: "buffering_period",
                         0x01: "pic_timing",
                         0x05: "user_data_unregistered",
+                        0x06: "recovery_point",
                         0x2d: "frame_packing_arrangement",
                         0x89: "mastering_display_colour_volume",
                         0x90: "content_light_level_info",
@@ -788,6 +789,11 @@ class FFMpreg(object):
                     case "content_light_level_info":
                         nal["clli-max-content-light-level"] = buf.ru16()
                         nal["clli-max-pic-average-light-level"] = buf.ru16()
+                    case "recovery_point":
+                        nal["recovery_frame_cnt"] = buf.rue()
+                        nal["exact-match-flag"] = buf.rb(1)
+                        nal["broken-link-flag"] = buf.rb(1)
+                        nal["changing-slice-group-idc"] = buf.rb(2)
                     case _:
                         nal["payload"] = buf.rh(buf.unit)
                         nal["unknown"] = True
@@ -2099,6 +2105,10 @@ class FFMpreg(object):
     def read_mp2_frame(buf: Buf) -> dict:
         frame = {}
 
+        # actually MP3
+        if (buf.pu16() >> 1) & 0x03 == 0b01:
+            return FFMpreg.read_mp3_frame(buf)
+
         buf.rb(12)
         frame["version-id"] = buf.rb(1)
         frame["layer"] = buf.rb(2)
@@ -2153,7 +2163,11 @@ class FFMpreg(object):
         if frame["protection-bit"] == 0:
             frame["crc"] = buf.rb(16)
 
-        frame["length"] = (144 * frame["bitrate"] // frame["sampling-rate"]) + frame["padding-bit"]
+        try:
+            frame["length"] = (144 * frame["bitrate"] // frame["sampling-rate"]) + frame["padding-bit"]
+        except Exception:
+            frame["length"] = buf.available() + 4
+            frame["invalid"] = True
 
         buf.skip(frame["length"] - 4)
 
@@ -2162,6 +2176,10 @@ class FFMpreg(object):
     @staticmethod
     def read_mp3_frame(buf: Buf) -> dict:
         frame = {}
+
+        # actually MP2
+        if (buf.pu16() >> 1) & 0x03 != 0b01:
+            return FFMpreg.read_mp2_frame(buf)
 
         buf.rb(11)
         frame["version"] = utils.unraw(
