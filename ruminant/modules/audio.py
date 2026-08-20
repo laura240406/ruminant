@@ -1,5 +1,5 @@
 from .. import module, utils, ruminant_types
-from ..buf import Buf
+from ..buf import Buf, UnitException
 from . import chew
 from ..media import FFMpreg
 import zlib
@@ -150,7 +150,7 @@ class ID3v2Module(module.RuminantModule):
         # try to decode it like the standard dictates
         try:
             return self._chew()
-        except AssertionError:
+        except (AssertionError, UnitException):
             # some files are broken, try again while forcing unsynchronized mode
             self.force = True
             self.buf.restore(bak)

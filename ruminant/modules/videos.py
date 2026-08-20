@@ -3423,14 +3423,6 @@ class MpegTsModule(module.RuminantModule):
                 del chunk["unknown"]
 
                 match self.es[chunk["pid"]][0]:
-                    case 21:
-                        chunk["type"] = "id3"
-
-                        blob = chunk["blob"]
-                        while blob[:3] != b"ID3":
-                            blob = blob[1:]
-
-                        chunk["data"] = chew(blob)
                     case _:
                         chunk["type"] = "es"
 
@@ -3643,6 +3635,8 @@ class MpegTsModule(module.RuminantModule):
                         sample["frames"] = []
                         while buf.hasunit():
                             sample["frames"].append(FFMpreg.read_aac_frame(buf))
+                    case 21:
+                        sample["tag"] = chew(Buf(ess[index]["blob"][ess[index]["header"]["length"] :]))
                     case _:
                         sample["blob"] = chew(ess[index]["blob"])
                         meta["streams"][pid]["unknown"] = True
