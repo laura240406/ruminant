@@ -1683,7 +1683,7 @@ class IsoModule(module.RuminantModule):
                     )
 
                     self.buf.sapunit()
-            case "mp4a" | "mp4v" | "drac":
+            case "drac":
                 ranges = utils.expand_ranges(secrets.get_parameter("0", data, "ranges"), 0, len(sample_to_offset) - 1)
                 data["samples"] = {}
 
@@ -1704,6 +1704,35 @@ class IsoModule(module.RuminantModule):
                         data["samples"][index].append(FFMpreg.read_ac3_frame(self.buf))
 
                     self.buf.sapunit()
+            case "mp4a" | "mp4v":
+                ranges = utils.expand_ranges(secrets.get_parameter("0", data, "ranges"), 0, len(sample_to_offset) - 1)
+
+                esds = self.get_all(codec["data"]["atoms"], "esds")[0]
+
+                # BOOK New MP4 ESDS codec
+                mode = None
+                for desc in esds["data"]["descriptor"]["value"]["children"]:
+                    if desc["tag"] == "DecoderConfigDescriptor":
+                        match desc["value"]["object-type-indictation"]:
+                            case "Audio ISO/IEC 11172-3":
+                                mode = "mp2/3"
+
+                data["samples"] = {}
+
+                for index in ranges:
+                    self.buf.seek(sample_to_offset[index])
+                    with self.buf.sub(sample_sizes[index]):
+                        match mode:
+                            case "mp2/3":
+                                data["samples"][index] = []
+
+                                while self.buf.available():
+                                    if (self.buf.pu16() >> 1) & 0x03 == 0b01:
+                                        data["samples"][index].append(FFMpreg.read_mp3_frame(self.buf))
+                                    else:
+                                        data["samples"][index].append(FFMpreg.read_mp2_frame(self.buf))
+                            case _:
+                                data["samples"][index] = chew(self.buf, blob_mode=True)
             # BOOK New MP4 handler
             case _:
                 ranges = utils.expand_ranges(secrets.get_parameter("0", data, "ranges"), 0, len(sample_to_offset) - 1)
@@ -3608,6 +3637,12 @@ class MpegTsModule(module.RuminantModule):
                                 sample["nalus"].append(FFMpreg.read_h265_nalu(buf))
 
                                 buf.sapunit()
+                    case 15:
+                        buf = Buf(ess[index]["blob"][ess[index]["header"]["length"] :])
+
+                        sample["frames"] = []
+                        while buf.hasunit():
+                            sample["frames"].append(FFMpreg.read_aac_frame(buf))
                     case _:
                         sample["blob"] = chew(ess[index]["blob"])
                         meta["streams"][pid]["unknown"] = True

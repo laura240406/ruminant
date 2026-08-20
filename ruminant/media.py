@@ -2259,4 +2259,65 @@ class FFMpreg(object):
 
         return frame
 
+    @staticmethod
+    def read_aac_frame(buf: Buf) -> dict:
+        frame = {}
+
+        buf.rb(12)
+        frame["id"] = utils.unraw(buf.rb(1), 1, {0x00: "MPEG-4", 0x01: "MPEG-2"}, True)
+        frame["layer"] = buf.rb(2)
+        frame["protection"] = buf.rb(1)
+        frame["profile"] = utils.unraw(buf.rb(2), 1, {0x00: "Main", 0x01: "LC", 0x02: "SSR"}, True)
+        frame["sampling-frequency"] = utils.unraw(
+            buf.rb(4),
+            1,
+            {
+                0x00: "96000",
+                0x01: "88200",
+                0x02: "64000",
+                0x03: "48000",
+                0x04: "44100",
+                0x05: "32000",
+                0x06: "24000",
+                0x07: "22050",
+                0x08: "16000",
+                0x09: "12000",
+                0x0a: "11025",
+                0x0b: "8000",
+                0x0c: "7350",
+            },
+            True,
+        )
+        frame["private"] = buf.rb(1)
+        frame["channel-configuration"] = utils.unraw(
+            buf.rb(3),
+            1,
+            {
+                0x01: "Mono",
+                0x02: "Stereo",
+                0x03: "3.0",
+                0x04: "3.0 + 1 rear",
+                0x05: "4.0",
+                0x06: "5.1 surround",
+                0x07: "7.1 surround",
+            },
+            True,
+        )
+        frame["original"] = buf.rb(1)
+        frame["home"] = buf.rb(1)
+        frame["copyright"] = buf.rb(1)
+        frame["copyright-start"] = buf.rb(1)
+        frame["frame-length"] = buf.rb(13)
+        frame["buffer-fullness"] = buf.rb(11)
+        frame["block-count"] = buf.rb(2)
+
+        buf.pasunit(frame["frame-length"] - 7)
+
+        if frame["protection"] == 0:
+            frame["crc"] = buf.ru16()
+
+        buf.sapunit()
+
+        return frame
+
     # BOOK New FFMpreg method
