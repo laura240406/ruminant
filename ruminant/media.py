@@ -818,219 +818,6 @@ class FFMpreg(object):
         return nal
 
     @staticmethod
-    def read_av1_obu(buf: Buf, state={}) -> dict:
-        obu = {}
-        obu["forbidden-bit"] = buf.rb(1)
-        obu["type"] = utils.unraw(
-            buf.rb(4),
-            1,
-            FFMpreg.AV1_OBU_TYPES,
-            True,
-        )
-        obu["extension-flag"] = buf.rb(1)
-        obu["has-size-flag"] = buf.rb(1)
-        obu["reserved1"] = buf.rb(1)
-
-        if obu["extension-flag"]:
-            obu["temporal-id"] = buf.rb(3)
-            obu["spatial-id"] = buf.rb(2)
-            obu["reserved2"] = buf.rb(3)
-
-        if obu["has-size-flag"]:
-            length = buf.ruleb()
-        else:
-            length = buf.unit if buf.unit is not None else buf.available()
-
-        obu["length"] = length
-
-        # BOOK New FFMpreg AV1 OBU
-        buf.pasunit(length)
-        match obu["type"]:
-            case "SEQUENCE_HEADER":
-                # https://aomediacodec.github.io/av1-spec/#sequence-header-obu-syntax
-                obu["seq-profile"] = buf.rb(3)
-                obu["still-picture"] = buf.rb(1)
-                obu["reduced-still-picture-header"] = buf.rb(1)
-
-                if obu["reduced-still-picture-header"]:
-                    obu["operating-points"] = [
-                        {
-                            "operating-point-idc": 0,
-                            "seq-level-idx": buf.rb(5),
-                        }
-                    ]
-                else:
-                    obu["timing-info-present"] = buf.rb(1)
-
-                    if obu["timing-info-present"]:
-                        obu["num-units-in-display-tick"] = buf.rb(32)
-                        obu["time-scale"] = buf.rb(32)
-                        obu["equal-picture-interval"] = buf.rb(1)
-
-                        if obu["equal-picture-interval"]:
-                            obu["num-ticks-per-picture-minus-one"] = buf.ruvlc()
-
-                        obu["decoder-model-info-present-flag"] = buf.rb(1)
-                        if obu["decoder-model-info-present-flag"]:
-                            obu["buffer-delay-length-minus-one"] = buf.rb(5)
-                            obu["num-units-in-decoding-tick"] = buf.rb(32)
-                            obu["buffer-removal-time-length-minus-one"] = buf.rb(5)
-                            obu["frame-presentation-time-length-minus-one"] = buf.rb(5)
-
-                    obu["initial-display-delay-present-flag"] = buf.rb(1)
-                    obu["operating-points-cnt-minus-one"] = buf.rb(5)
-
-                    obu["operating-points"] = []
-                    for i in range(0, obu["operating-points-cnt-minus-one"] + 1):
-                        op = {}
-                        op["operating-point-idc"] = buf.rb(12)
-                        op["seq-level-idx"] = buf.rb(5)
-
-                        if op["seq-level-idx"] > 7:
-                            op["seq-tier"] = buf.rb(1)
-
-                        if obu.get("decoder-model-info-present-flag"):
-                            op["decoder-model-present-for-this-op"] = buf.rb(1)
-
-                            if op["decoder-model-present-for-this-op"]:
-                                n = obu["buffer-delay-length-minus-one"] + 1
-                                op["decoder-buffer-delay"] = buf.rb(n)
-                                op["encoder-buffer-delay"] = buf.rb(n)
-                                op["low-delay-mode-flag"] = buf.rb(1)
-
-                        if obu.get("initial-display-delay-present-flag"):
-                            op["initial-display-delay-present-for-this-op"] = buf.rb(1)
-
-                            if op["initial-display-delay-present-for-this-op"]:
-                                op["initial-display-delay-minus-one"] = buf.rb(4)
-
-                        obu["operating-points"].append(op)
-
-                obu["frame-width-bits-minus-one"] = buf.rb(4)
-                obu["frame-height-bits-minus-one"] = buf.rb(4)
-                obu["max-frame-width-minus-one"] = buf.rb(obu["frame-width-bits-minus-one"] + 1)
-                obu["max-frame-height-minus-one"] = buf.rb(obu["frame-height-bits-minus-one"] + 1)
-
-                if not obu["reduced-still-picture-header"]:
-                    obu["frame-id-numbers-present-flag"] = buf.rb(1)
-
-                if obu.get("frame-id-numbers-present-flag"):
-                    obu["delta-frame-id-length-minus-two"] = buf.rb(4)
-                    obu["additional-frame-id-length-minus-one"] = buf.rb(3)
-
-                obu["use-128x128-superblock"] = buf.rb(1)
-                obu["enable-filter-intra"] = buf.rb(1)
-                obu["enable-intra-edge-filter"] = buf.rb(1)
-
-                if not obu["reduced-still-picture-header"]:
-                    obu["enable-interintra-compound"] = buf.rb(1)
-                    obu["enable-masked-compound"] = buf.rb(1)
-                    obu["enable-warped-motion"] = buf.rb(1)
-                    obu["enable-dual-filter"] = buf.rb(1)
-                    obu["enable-order-hint"] = buf.rb(1)
-
-                    if obu.get("enable-order-hint"):
-                        obu["enable-jnt-comp"] = buf.rb(1)
-                        obu["enable-ref-frame-mvs"] = buf.rb(1)
-
-                    obu["seq-choose-screen-content-tools"] = buf.rb(1)
-
-                    if obu["seq-choose-screen-content-tools"]:
-                        obu["seq-force-screen-content-tools"] = 2
-                    else:
-                        obu["seq-force-screen-content-tools"] = buf.rb(1)
-
-                    if obu.get("seq-force-screen-content-tools", 0) > 0:
-                        obu["seq-choose-integer-mv"] = buf.rb(1)
-
-                        if obu["seq-choose-integer-mv"]:
-                            obu["seq-force-integer-mv"] = 2
-                        else:
-                            obu["seq-force-integer-mv"] = buf.rb(1)
-                    else:
-                        obu["seq-force-integer-mv"] = 2
-
-                    if obu.get("enable-order-hint"):
-                        obu["order-hint-bits-minus-1"] = buf.rb(3)
-                else:
-                    obu["seq-force-screen-content-tools"] = 2
-                    obu["seq-force-integer-mv"] = 2
-
-                obu["enable-superres"] = buf.rb(1)
-                obu["enable-cdef"] = buf.rb(1)
-                obu["enable-restoration"] = buf.rb(1)
-
-                obu["high-bitdepth"] = buf.rb(1)
-
-                if obu["seq-profile"] == 2 and obu["high-bitdepth"]:
-                    obu["twelve-bit"] = buf.rb(1)
-                    bit_depth = 12 if obu.get("twelve-bit") else 10
-                else:
-                    bit_depth = 10 if obu["high-bitdepth"] else 8
-
-                if obu["seq-profile"] == 1:
-                    obu["monochrome"] = 0
-                else:
-                    obu["monochrome"] = buf.rb(1)
-
-                obu["color-description-present-flag"] = buf.rb(1)
-
-                if obu["color-description-present-flag"]:
-                    obu["color-primaries"] = buf.rb(8)
-                    obu["transfer-characteristics"] = buf.rb(8)
-                    obu["matrix-coefficients"] = buf.rb(8)
-
-                if obu.get("monochrome"):
-                    obu["color-range"] = buf.rb(1)
-                    obu["subsampling-x"] = 1
-                    obu["subsampling-y"] = 1
-                else:
-                    if (
-                        obu.get("color-primaries") == 1
-                        and obu.get("transfer-characteristics") == 13
-                        and obu.get("matrix-coefficients") == 0
-                    ):
-                        obu["color-range"] = 1
-                        obu["subsampling-x"] = 0
-                        obu["subsampling-y"] = 0
-                    else:
-                        obu["color-range"] = buf.rb(1)
-
-                        if obu["seq-profile"] == 0:
-                            obu["subsampling-x"] = 1
-                            obu["subsampling-y"] = 1
-                        elif obu["seq-profile"] == 1:
-                            obu["subsampling-x"] = 0
-                            obu["subsampling-y"] = 0
-                        else:
-                            if bit_depth == 12:
-                                obu["subsampling-x"] = buf.rb(1)
-                                if obu["subsampling-x"]:
-                                    obu["subsampling-y"] = buf.rb(1)
-                                else:
-                                    obu["subsampling-y"] = 0
-                            else:
-                                obu["subsampling-x"] = 1
-                                obu["subsampling-y"] = 0
-
-                        if obu.get("subsampling-x") and obu.get("subsampling-y"):
-                            obu["chroma-sample-position"] = buf.rb(2)
-
-                    obu["separate-uv-delta-q"] = buf.rb(1)
-
-                obu["film-grain-params-present"] = buf.rb(1)
-
-                buf.align()
-            case "TEMPORAL_DELIMITER":
-                pass
-            case _:
-                obu["unknown"] = True
-
-        buf.sapunit()
-
-        return obu
-
-    @staticmethod
     def read_h265_profile_tier_level(buf, profile_present_flag, max_num_sub_layers_minus_one):
         nal = {}
 
@@ -1765,6 +1552,219 @@ class FFMpreg(object):
                 nal["pic-type"] = utils.unraw(buf.rb(3), 1, {0x00: "I", 0x01: "P/I", 0x02: "B/P/I"}, True)
 
         return nal
+
+    @staticmethod
+    def read_av1_obu(buf: Buf, state={}) -> dict:
+        obu = {}
+        obu["forbidden-bit"] = buf.rb(1)
+        obu["type"] = utils.unraw(
+            buf.rb(4),
+            1,
+            FFMpreg.AV1_OBU_TYPES,
+            True,
+        )
+        obu["extension-flag"] = buf.rb(1)
+        obu["has-size-flag"] = buf.rb(1)
+        obu["reserved1"] = buf.rb(1)
+
+        if obu["extension-flag"]:
+            obu["temporal-id"] = buf.rb(3)
+            obu["spatial-id"] = buf.rb(2)
+            obu["reserved2"] = buf.rb(3)
+
+        if obu["has-size-flag"]:
+            length = buf.ruleb()
+        else:
+            length = buf.unit if buf.unit is not None else buf.available()
+
+        obu["length"] = length
+
+        # BOOK New FFMpreg AV1 OBU
+        buf.pasunit(length)
+        match obu["type"]:
+            case "SEQUENCE_HEADER":
+                # https://aomediacodec.github.io/av1-spec/#sequence-header-obu-syntax
+                obu["seq-profile"] = buf.rb(3)
+                obu["still-picture"] = buf.rb(1)
+                obu["reduced-still-picture-header"] = buf.rb(1)
+
+                if obu["reduced-still-picture-header"]:
+                    obu["operating-points"] = [
+                        {
+                            "operating-point-idc": 0,
+                            "seq-level-idx": buf.rb(5),
+                        }
+                    ]
+                else:
+                    obu["timing-info-present"] = buf.rb(1)
+
+                    if obu["timing-info-present"]:
+                        obu["num-units-in-display-tick"] = buf.rb(32)
+                        obu["time-scale"] = buf.rb(32)
+                        obu["equal-picture-interval"] = buf.rb(1)
+
+                        if obu["equal-picture-interval"]:
+                            obu["num-ticks-per-picture-minus-one"] = buf.ruvlc()
+
+                        obu["decoder-model-info-present-flag"] = buf.rb(1)
+                        if obu["decoder-model-info-present-flag"]:
+                            obu["buffer-delay-length-minus-one"] = buf.rb(5)
+                            obu["num-units-in-decoding-tick"] = buf.rb(32)
+                            obu["buffer-removal-time-length-minus-one"] = buf.rb(5)
+                            obu["frame-presentation-time-length-minus-one"] = buf.rb(5)
+
+                    obu["initial-display-delay-present-flag"] = buf.rb(1)
+                    obu["operating-points-cnt-minus-one"] = buf.rb(5)
+
+                    obu["operating-points"] = []
+                    for i in range(0, obu["operating-points-cnt-minus-one"] + 1):
+                        op = {}
+                        op["operating-point-idc"] = buf.rb(12)
+                        op["seq-level-idx"] = buf.rb(5)
+
+                        if op["seq-level-idx"] > 7:
+                            op["seq-tier"] = buf.rb(1)
+
+                        if obu.get("decoder-model-info-present-flag"):
+                            op["decoder-model-present-for-this-op"] = buf.rb(1)
+
+                            if op["decoder-model-present-for-this-op"]:
+                                n = obu["buffer-delay-length-minus-one"] + 1
+                                op["decoder-buffer-delay"] = buf.rb(n)
+                                op["encoder-buffer-delay"] = buf.rb(n)
+                                op["low-delay-mode-flag"] = buf.rb(1)
+
+                        if obu.get("initial-display-delay-present-flag"):
+                            op["initial-display-delay-present-for-this-op"] = buf.rb(1)
+
+                            if op["initial-display-delay-present-for-this-op"]:
+                                op["initial-display-delay-minus-one"] = buf.rb(4)
+
+                        obu["operating-points"].append(op)
+
+                obu["frame-width-bits-minus-one"] = buf.rb(4)
+                obu["frame-height-bits-minus-one"] = buf.rb(4)
+                obu["max-frame-width-minus-one"] = buf.rb(obu["frame-width-bits-minus-one"] + 1)
+                obu["max-frame-height-minus-one"] = buf.rb(obu["frame-height-bits-minus-one"] + 1)
+
+                if not obu["reduced-still-picture-header"]:
+                    obu["frame-id-numbers-present-flag"] = buf.rb(1)
+
+                if obu.get("frame-id-numbers-present-flag"):
+                    obu["delta-frame-id-length-minus-two"] = buf.rb(4)
+                    obu["additional-frame-id-length-minus-one"] = buf.rb(3)
+
+                obu["use-128x128-superblock"] = buf.rb(1)
+                obu["enable-filter-intra"] = buf.rb(1)
+                obu["enable-intra-edge-filter"] = buf.rb(1)
+
+                if not obu["reduced-still-picture-header"]:
+                    obu["enable-interintra-compound"] = buf.rb(1)
+                    obu["enable-masked-compound"] = buf.rb(1)
+                    obu["enable-warped-motion"] = buf.rb(1)
+                    obu["enable-dual-filter"] = buf.rb(1)
+                    obu["enable-order-hint"] = buf.rb(1)
+
+                    if obu.get("enable-order-hint"):
+                        obu["enable-jnt-comp"] = buf.rb(1)
+                        obu["enable-ref-frame-mvs"] = buf.rb(1)
+
+                    obu["seq-choose-screen-content-tools"] = buf.rb(1)
+
+                    if obu["seq-choose-screen-content-tools"]:
+                        obu["seq-force-screen-content-tools"] = 2
+                    else:
+                        obu["seq-force-screen-content-tools"] = buf.rb(1)
+
+                    if obu.get("seq-force-screen-content-tools", 0) > 0:
+                        obu["seq-choose-integer-mv"] = buf.rb(1)
+
+                        if obu["seq-choose-integer-mv"]:
+                            obu["seq-force-integer-mv"] = 2
+                        else:
+                            obu["seq-force-integer-mv"] = buf.rb(1)
+                    else:
+                        obu["seq-force-integer-mv"] = 2
+
+                    if obu.get("enable-order-hint"):
+                        obu["order-hint-bits-minus-1"] = buf.rb(3)
+                else:
+                    obu["seq-force-screen-content-tools"] = 2
+                    obu["seq-force-integer-mv"] = 2
+
+                obu["enable-superres"] = buf.rb(1)
+                obu["enable-cdef"] = buf.rb(1)
+                obu["enable-restoration"] = buf.rb(1)
+
+                obu["high-bitdepth"] = buf.rb(1)
+
+                if obu["seq-profile"] == 2 and obu["high-bitdepth"]:
+                    obu["twelve-bit"] = buf.rb(1)
+                    bit_depth = 12 if obu.get("twelve-bit") else 10
+                else:
+                    bit_depth = 10 if obu["high-bitdepth"] else 8
+
+                if obu["seq-profile"] == 1:
+                    obu["monochrome"] = 0
+                else:
+                    obu["monochrome"] = buf.rb(1)
+
+                obu["color-description-present-flag"] = buf.rb(1)
+
+                if obu["color-description-present-flag"]:
+                    obu["color-primaries"] = buf.rb(8)
+                    obu["transfer-characteristics"] = buf.rb(8)
+                    obu["matrix-coefficients"] = buf.rb(8)
+
+                if obu.get("monochrome"):
+                    obu["color-range"] = buf.rb(1)
+                    obu["subsampling-x"] = 1
+                    obu["subsampling-y"] = 1
+                else:
+                    if (
+                        obu.get("color-primaries") == 1
+                        and obu.get("transfer-characteristics") == 13
+                        and obu.get("matrix-coefficients") == 0
+                    ):
+                        obu["color-range"] = 1
+                        obu["subsampling-x"] = 0
+                        obu["subsampling-y"] = 0
+                    else:
+                        obu["color-range"] = buf.rb(1)
+
+                        if obu["seq-profile"] == 0:
+                            obu["subsampling-x"] = 1
+                            obu["subsampling-y"] = 1
+                        elif obu["seq-profile"] == 1:
+                            obu["subsampling-x"] = 0
+                            obu["subsampling-y"] = 0
+                        else:
+                            if bit_depth == 12:
+                                obu["subsampling-x"] = buf.rb(1)
+                                if obu["subsampling-x"]:
+                                    obu["subsampling-y"] = buf.rb(1)
+                                else:
+                                    obu["subsampling-y"] = 0
+                            else:
+                                obu["subsampling-x"] = 1
+                                obu["subsampling-y"] = 0
+
+                        if obu.get("subsampling-x") and obu.get("subsampling-y"):
+                            obu["chroma-sample-position"] = buf.rb(2)
+
+                    obu["separate-uv-delta-q"] = buf.rb(1)
+
+                obu["film-grain-params-present"] = buf.rb(1)
+
+                buf.align()
+            case "TEMPORAL_DELIMITER":
+                pass
+            case _:
+                obu["unknown"] = True
+
+        buf.sapunit()
+
+        return obu
 
     @staticmethod
     def read_av2_obu(buf: Buf, state={}) -> dict:
