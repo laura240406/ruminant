@@ -4671,7 +4671,7 @@ class JvtNalH264Module(module.RuminantModule):
             return False
 
         with buf:
-            return buf.ru32() == 1 and buf.ru8() & 0x1f == 0x07
+            return buf.ru32() == 1 and buf.ru8() & 0x1f in (0x01, 0x06, 0x07, 0x08, 0x09)
 
     def chew(self) -> ruminant_types.JSON:
         meta: dict = {}

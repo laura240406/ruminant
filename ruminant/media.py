@@ -226,9 +226,11 @@ class FFMpreg(object):
 
     @staticmethod
     def read_h264_nalu(buf: Buf, slim=False, state={}) -> dict:
+        nal = {}
+        nal["offset"] = buf.tell()
+
         buf = Buf(buf.read(buf.unit).replace(b"\x00\x00\x03", b"\x00\x00"))
 
-        nal = {}
         nal["length"] = buf.available()
         nal["forbidden-zero-bit"] = buf.rb(1)
         nal["ref-idc"] = buf.rb(2)
@@ -1040,9 +1042,11 @@ class FFMpreg(object):
 
     @staticmethod
     def read_h265_nalu(buf: Buf, state={}) -> dict:
+        nal = {}
+        nal["offset"] = buf.tell()
+
         buf = Buf(buf.read(buf.unit).replace(b"\x00\x00\x03", b"\x00\x00"))
 
-        nal = {}
         nal["length"] = buf.available()
         nal["forbidden-zero-bit"] = buf.rb(1)
         nal["unit-type"] = utils.unraw(
@@ -1541,6 +1545,9 @@ class FFMpreg(object):
 
     @staticmethod
     def read_h266_nalu(buf: Buf, state={}) -> dict:
+        nal = {}
+        nal["offset"] = buf.tell()
+
         buf = Buf(buf.read(buf.unit).replace(b"\x00\x00\x03", b"\x00\x00"))
 
         nal = {}
@@ -1562,6 +1569,7 @@ class FFMpreg(object):
     @staticmethod
     def read_av1_obu(buf: Buf, state={}) -> dict:
         obu = {}
+        obu["offset"] = buf.tell()
         obu["forbidden-bit"] = buf.rb(1)
         obu["type"] = utils.unraw(
             buf.rb(4),
@@ -1775,6 +1783,7 @@ class FFMpreg(object):
     @staticmethod
     def read_av2_obu(buf: Buf, state={}) -> dict:
         obu = {}
+        obu["offset"] = buf.tell()
         obu["length"] = buf.ruleb()
         buf.pasunit(obu["length"])
 
