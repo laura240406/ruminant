@@ -764,6 +764,21 @@ class Buf(object):
         with self:
             return self.ruvlc()
 
+    def rxu(self):
+        v = 0
+        while True:
+            c = self.ru8()
+            v += c
+
+            if c != 0xff:
+                break
+
+        return v
+
+    def pxu(self):
+        with self:
+            return self.rxu()
+
     def align(self):
         if self._bits != 0:
             self._bits = 0

@@ -2244,13 +2244,7 @@ class MatroskaModule(module.RuminantModule):
                     count = self.buf.ru8() + 1
 
                     for i in range(0, count - 1):
-                        size = 0
-                        while True:
-                            c = self.buf.ru8()
-                            size += c
-
-                            if c != 0xff:
-                                break
+                        size = self.buf.rxu()
 
                         sample_offsets[track_id].append(self.buf.tell())
                         sample_sizes[track_id].append(size)
@@ -2808,13 +2802,7 @@ class MatroskaModule(module.RuminantModule):
                         for i in range(0, parsed["header-count"] - 1):
                             header = {}
 
-                            length = 0
-                            while True:
-                                c = self.buf.ru8()
-                                length += c
-
-                                if c != 0xff:
-                                    break
+                            length = self.buf.rxu()
 
                             header["length"] = length
 

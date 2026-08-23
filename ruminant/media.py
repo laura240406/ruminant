@@ -738,22 +738,11 @@ class FFMpreg(object):
                 buf.align()
             case "Supplemental enhancement information":
                 # BOOK New FFMpreg H.264 SEI
-                t = 0
-                while True:
-                    b = buf.ru8()
-                    t += b
-                    if b != 0xff:
-                        break
-
-                l = 0
-                while True:
-                    b = buf.ru8()
-                    l += b
-                    if b != 0xff:
-                        break
+                typ = buf.rxu()
+                length = buf.rxu()
 
                 nal["type"] = utils.unraw(
-                    t,
+                    typ,
                     1,
                     {
                         0x00: "buffering_period",
@@ -766,9 +755,9 @@ class FFMpreg(object):
                     },
                     True,
                 )
-                nal["length"] = l
+                nal["length"] = length
 
-                buf.pasunit(l)
+                buf.pasunit(length)
 
                 match nal["type"]:
                     case "user_data_unregistered":
@@ -1140,21 +1129,8 @@ class FFMpreg(object):
                 nal["seis"] = []
 
                 while buf.available() > 1:
-                    typ = 0
-                    while True:
-                        part = buf.ru8()
-                        typ += part
-
-                        if part != 0xff:
-                            break
-
-                    length = 0
-                    while True:
-                        part = buf.ru8()
-                        length += part
-
-                        if part != 0xff:
-                            break
+                    typ = buf.rxu()
+                    length = buf.rxu()
 
                     sei = {}
                     sei["type"] = utils.unraw(
