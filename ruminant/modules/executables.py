@@ -2225,6 +2225,40 @@ class PeModule(module.RuminantModule):
                         }
 
                         self.buf.sapunit()
+
+                        self.seek_vaddr(rva["parsed"]["metadata"]["base"]["raw"])
+                        self.buf.setunit(rva["parsed"]["metadata"]["size"]["raw"])
+
+                        self.buf.skip(4)
+                        table: dict = {}
+                        table["major-version"] = self.buf.ru16l()
+                        table["minor-version"] = self.buf.ru16l()
+                        table["reserved"] = self.buf.ru32l()
+                        table["version"] = self.buf.rs(self.buf.ru32l())
+                        table["flags"] = self.buf.ru16l()
+                        table["stream-count"] = self.buf.ru16l()
+
+                        table["streams"] = []
+                        for i in range(0, table["stream-count"]):
+                            stream: dict = {}
+                            stream["offset"] = self.buf.ru32l()
+                            stream["size"] = self.buf.ru32l()
+                            stream["name"] = self.buf.rzs()
+                            self.buf.skip(3 - (len(stream["name"]) % 4))
+
+                            table["streams"].append(stream)
+
+                        rva["parsed"]["metadata"]["parsed"] = table
+
+                        self.buf.sapunit()
+
+                        for stream in table["streams"]:
+                            self.seek_vaddr(stream["offset"])
+                            self.buf.pasunit(stream["size"])
+
+                            # TODO
+
+                            self.buf.sapunit()
                     case "Debug":
                         self.seek_vaddr(rva["base"])
                         self.buf.setunit(min(self.buf.unit, rva["size"]))
