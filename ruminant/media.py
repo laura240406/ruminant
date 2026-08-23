@@ -242,6 +242,12 @@ class FFMpreg(object):
             True,
         )
 
+        if "seq" not in state:
+            state["seq"] = {}
+
+        if "pic" not in state:
+            state["pic"] = {}
+
         match nal["unit-type"]:
             case "Sequence parameter set":
                 # ISO/IEC 14496-10:2022 page 59
@@ -250,6 +256,7 @@ class FFMpreg(object):
                 nal["reserved"] = buf.rb(2)
                 nal["level-idc"] = buf.ru8()
                 nal["seq-parameter-set-id"] = buf.rue()
+                state["seq"][nal["seq-parameter-set-id"]] = {}
 
                 if nal["profile-idc"] in (
                     44,
@@ -268,13 +275,17 @@ class FFMpreg(object):
                     244,
                 ):
                     nal["chroma-format-idc"] = buf.rue()
-                    state["chroma-format-idc"] = nal["chroma-format-idc"]
+                    state["seq"][nal["seq-parameter-set-id"]]["chroma-format-idc"] = nal["chroma-format-idc"]
 
                     if nal["chroma-format-idc"] == 3:
                         nal["separate-colour-plane-flag"] = buf.rb(1)
-                        state["separate-colour-plane-flag"] = nal["separate-colour-plane-flag"]
+                        state["seq"][nal["seq-parameter-set-id"]]["separate-colour-plane-flag"] = nal[
+                            "separate-colour-plane-flag"
+                        ]
 
-                    state["chroma-array-type"] = 0 if nal.get("separate-colour-plane-flag", 0) else nal["chroma-format-idc"]
+                    state["seq"][nal["seq-parameter-set-id"]]["chroma-array-type"] = (
+                        0 if nal.get("separate-colour-plane-flag", 0) else nal["chroma-format-idc"]
+                    )
 
                     nal["bit-depth-luma-minus-eight"] = buf.rue()
                     nal["bit-depth-chroma-minus-eight"] = buf.rue()
@@ -291,16 +302,22 @@ class FFMpreg(object):
                             nal["seq-scaling-matrices"].append(matrix)
 
                 nal["log2-max-frame-num-minus-four"] = buf.rue()
-                state["log2-max-frame-num-minus-four"] = nal["log2-max-frame-num-minus-four"]
+                state["seq"][nal["seq-parameter-set-id"]]["log2-max-frame-num-minus-four"] = nal[
+                    "log2-max-frame-num-minus-four"
+                ]
                 nal["pic-order-cnt-type"] = buf.rue()
-                state["pic-order-cnt-type"] = nal["pic-order-cnt-type"]
+                state["seq"][nal["seq-parameter-set-id"]]["pic-order-cnt-type"] = nal["pic-order-cnt-type"]
 
                 if nal["pic-order-cnt-type"] == 0:
                     nal["log2-max-pic-order-cnt-lsb-minus-four"] = buf.rue()
-                    state["log2-max-pic-order-cnt-lsb-minus-four"] = nal["log2-max-pic-order-cnt-lsb-minus-four"]
+                    state["seq"][nal["seq-parameter-set-id"]]["log2-max-pic-order-cnt-lsb-minus-four"] = nal[
+                        "log2-max-pic-order-cnt-lsb-minus-four"
+                    ]
                 elif nal["pic-order-cnt-type"] == 1:
                     nal["delta-pic-order-always-zero-flag"] = buf.rb(1)
-                    state["delta-pic-order-always-zero-flag"] = nal["delta-pic-order-always-zero-flag"]
+                    state["seq"][nal["seq-parameter-set-id"]]["delta-pic-order-always-zero-flag"] = nal[
+                        "delta-pic-order-always-zero-flag"
+                    ]
                     nal["offset-for-non-ref-pic"] = buf.rse()
                     nal["offset-for-top-to-bottom-field"] = buf.rse()
                     nal["num-ref-frames-in-pic-order-cnt-cycle"] = buf.rue()
@@ -309,10 +326,10 @@ class FFMpreg(object):
                 nal["max-num-ref-frames"] = buf.rue()
                 nal["gaps-in-frame-num-value-allowed-flag"] = buf.rb(1)
                 nal["pic-width-in-mbs-minus-one"] = buf.rue()
-                state["pic-width-in-mbs-minus-one"] = nal["pic-width-in-mbs-minus-one"]
+                state["seq"][nal["seq-parameter-set-id"]]["pic-width-in-mbs-minus-one"] = nal["pic-width-in-mbs-minus-one"]
                 nal["pic-height-in-map-units-minus-one"] = buf.rue()
                 nal["frame-mbs-only-flag"] = buf.rb(1)
-                state["frame-mbs-only-flag"] = nal["frame-mbs-only-flag"]
+                state["seq"][nal["seq-parameter-set-id"]]["frame-mbs-only-flag"] = nal["frame-mbs-only-flag"]
 
                 if not nal["frame-mbs-only-flag"]:
                     nal["mb-adaptive-frame-field-flag"] = buf.rb(1)
@@ -369,24 +386,28 @@ class FFMpreg(object):
                         nal["fixed-frame-rate-flag"] = buf.rb(1)
 
                     nal["nal-hrd-parameters-present-flag"] = buf.rb(1)
-                    state["nal-hrd-parameters-present-flag"] = nal["nal-hrd-parameters-present-flag"]
+                    state["seq"][nal["seq-parameter-set-id"]]["nal-hrd-parameters-present-flag"] = nal[
+                        "nal-hrd-parameters-present-flag"
+                    ]
 
                     if nal["nal-hrd-parameters-present-flag"]:
                         nal["hrd-parameters"] = FFMpreg.read_h264_hrd_parameters(buf)
-                        state["hrd-parameters"] = nal["hrd-parameters"]
+                        state["seq"][nal["seq-parameter-set-id"]]["hrd-parameters"] = nal["hrd-parameters"]
 
                     nal["vcl-hrd-parameters-present-flag"] = buf.rb(1)
-                    state["vcl-hrd-parameters-present-flag"] = nal["vcl-hrd-parameters-present-flag"]
+                    state["seq"][nal["seq-parameter-set-id"]]["vcl-hrd-parameters-present-flag"] = nal[
+                        "vcl-hrd-parameters-present-flag"
+                    ]
 
                     if nal["vcl-hrd-parameters-present-flag"]:
                         nal["vcl-hrd-parameters"] = FFMpreg.read_h264_hrd_parameters(buf)
-                        state["vcl-hrd-parameters"] = nal["vcl-hrd-parameters"]
+                        state["seq"][nal["seq-parameter-set-id"]]["vcl-hrd-parameters"] = nal["vcl-hrd-parameters"]
 
                     if nal["nal-hrd-parameters-present-flag"] or nal["vcl-hrd-parameters-present-flag"]:
                         nal["low-delay-hrd-flag"] = buf.rb(1)
 
                     nal["pic-struct-present-flag"] = buf.rb(1)
-                    state["pic-struct-present-flag"] = nal["pic-struct-present-flag"]
+                    state["seq"][nal["seq-parameter-set-id"]]["pic-struct-present-flag"] = nal["pic-struct-present-flag"]
                     nal["bitstream-restriction-flag"] = buf.rb(1)
 
                     if nal["bitstream-restriction-flag"]:
@@ -401,17 +422,21 @@ class FFMpreg(object):
                 buf.align()
             case "Picture parameter set":
                 nal["pic-parameter-set-id"] = buf.rue()
+                state["pic"][nal["pic-parameter-set-id"]] = {}
                 nal["seq-parameter-set-id"] = buf.rue()
+                state["pic"][nal["pic-parameter-set-id"]]["seq-parameter-set-id"] = nal["seq-parameter-set-id"]
                 nal["entropy-coding-mode-flag"] = buf.rb(1)
-                state["entropy-coding-mode-flag"] = nal["entropy-coding-mode-flag"]
+                state["pic"][nal["pic-parameter-set-id"]]["entropy-coding-mode-flag"] = nal["entropy-coding-mode-flag"]
                 nal["bottom-field-pic-order-in-frame-present-flag"] = buf.rb(1)
-                state["bottom-field-pic-order-in-frame-present-flag"] = nal["bottom-field-pic-order-in-frame-present-flag"]
+                state["pic"][nal["pic-parameter-set-id"]]["bottom-field-pic-order-in-frame-present-flag"] = nal[
+                    "bottom-field-pic-order-in-frame-present-flag"
+                ]
                 nal["num-slice-groups-minus-one"] = buf.rue()
-                state["num-slice-groups-minus-one"] = nal["num-slice-groups-minus-one"]
+                state["pic"][nal["pic-parameter-set-id"]]["num-slice-groups-minus-one"] = nal["num-slice-groups-minus-one"]
 
                 if nal["num-slice-groups-minus-one"] > 0:
                     nal["slice-group-map-type"] = buf.rue()
-                    state["slice-group-map-type"] = nal["slice-group-map-type"]
+                    state["pic"][nal["pic-parameter-set-id"]]["slice-group-map-type"] = nal["slice-group-map-type"]
 
                     match nal["slice-group-map-type"]:
                         case 0:
@@ -425,28 +450,38 @@ class FFMpreg(object):
                         case 3 | 4 | 5:
                             nal["slice-group-change-direction-flag"] = buf.rb(1)
                             nal["slice-group-change-rate-minus-one"] = buf.rue()
-                            state["slice-group-change-rate-minus-one"] = nal["slice-group-change-rate-minus-one"]
+                            state["pic"][nal["pic-parameter-set-id"]]["slice-group-change-rate-minus-one"] = nal[
+                                "slice-group-change-rate-minus-one"
+                            ]
                         case 6:
                             nal["pic-size-in-map-units-minus-one"] = buf.rue()
                             v = math.ceil(math.log2(nal["num-slice-groups-minus-one"] + 1))
                             nal["slice-group-id"] = [buf.rb(v) for i in range(nal["pic-size-in-map-units-minus-one"] + 1)]
 
                 nal["num-ref-idx-l0-default-active-minus-one"] = buf.rue()
-                state["num-ref-idx-l0-default-active-minus-one"] = nal["num-ref-idx-l0-default-active-minus-one"]
+                state["pic"][nal["pic-parameter-set-id"]]["num-ref-idx-l0-default-active-minus-one"] = nal[
+                    "num-ref-idx-l0-default-active-minus-one"
+                ]
                 nal["num-ref-idx-l1-default-active-minus-one"] = buf.rue()
-                state["num-ref-idx-l1-default-active-minus-one"] = nal["num-ref-idx-l1-default-active-minus-one"]
+                state["pic"][nal["pic-parameter-set-id"]]["num-ref-idx-l1-default-active-minus-one"] = nal[
+                    "num-ref-idx-l1-default-active-minus-one"
+                ]
                 nal["weighted-pred-flag"] = buf.rb(1)
-                state["weighted-pred-flag"] = nal["weighted-pred-flag"]
+                state["pic"][nal["pic-parameter-set-id"]]["weighted-pred-flag"] = nal["weighted-pred-flag"]
                 nal["weighted-bipred-idc"] = buf.rb(2)
-                state["weighted-bipred-idc"] = nal["weighted-bipred-idc"]
+                state["pic"][nal["pic-parameter-set-id"]]["weighted-bipred-idc"] = nal["weighted-bipred-idc"]
                 nal["pic-init-qp-minus26"] = buf.rse()
                 nal["pic-init-qs-minus26"] = buf.rse()
                 nal["chroma-qp-index-offset"] = buf.rse()
                 nal["deblocking-filter-control-present-flag"] = buf.rb(1)
-                state["deblocking-filter-control-present-flag"] = nal["deblocking-filter-control-present-flag"]
+                state["pic"][nal["pic-parameter-set-id"]]["deblocking-filter-control-present-flag"] = nal[
+                    "deblocking-filter-control-present-flag"
+                ]
                 nal["constrained-intra-pred-flag"] = buf.rb(1)
                 nal["redundant-pic-cnt-present-flag"] = buf.rb(1)
-                state["redundant-pic-cnt-present-flag"] = nal["redundant-pic-cnt-present-flag"]
+                state["pic"][nal["pic-parameter-set-id"]]["redundant-pic-cnt-present-flag"] = nal[
+                    "redundant-pic-cnt-present-flag"
+                ]
 
                 if buf.available() > 0 and not (buf._bits == 0 and buf.pu8() == 0x80):
                     nal["transform-8x8-mode-flag"] = buf.rb(1)
@@ -454,7 +489,10 @@ class FFMpreg(object):
 
                     if nal["pic-scaling-matrix-present-flag"]:
                         nal["pic-scaling-matrices"] = []
-                        num_matrices = 6 + ((6 if state.get("chroma-format-idc") == 3 else 2) * nal["transform-8x8-mode-flag"])
+                        num_matrices = 6 + (
+                            (6 if state["seq"].get(nal["seq-parameter-set-id"], {}).get("chroma-format-idc") == 3 else 2)
+                            * nal["transform-8x8-mode-flag"]
+                        )
                         for i in range(num_matrices):
                             matrix = []
                             if buf.rb(1):
@@ -473,12 +511,16 @@ class FFMpreg(object):
                 nal["slice-type"] = buf.rue()
                 nal["pic-parameter-set-id"] = buf.rue()
 
-                if state.get("separate-colour-plane-flag"):
+                seq_parameter_set_id = state["pic"].get(nal["pic-parameter-set-id"], {}).get("seq-parameter-set-id")
+
+                if state["seq"].get(seq_parameter_set_id, {}).get("separate-colour-plane-flag"):
                     nal["colour-plane-id"] = buf.rb(2)
 
-                nal["frame-num"] = buf.rb(state.get("log2-max-frame-num-minus-four", 0) + 4)
+                nal["frame-num"] = buf.rb(
+                    state["seq"].get(seq_parameter_set_id, {}).get("log2-max-frame-num-minus-four", 0) + 4
+                )
 
-                if not state.get("frame-mbs-only-flag"):
+                if not state["seq"].get(seq_parameter_set_id, {}).get("frame-mbs-only-flag"):
                     nal["field-pic-flag"] = buf.rb(1)
 
                     if nal["field-pic-flag"]:
@@ -487,19 +529,25 @@ class FFMpreg(object):
                 if nal["unit-type"] == "Coded slice of an IDR picture":
                     nal["idr-pic-id"] = buf.rue()
 
-                temp = state.get("pic-order-cnt-type", 0)
+                temp = state["pic"].get(nal["pic-parameter-set-id"], {}).get("pic-order-cnt-type", 0)
                 if temp == 0:
-                    nal["pic-order-cnt-lsb"] = buf.rb(state.get("log2-max-pic-order-cnt-lsb-minus-four", 0) + 4)
+                    nal["pic-order-cnt-lsb"] = buf.rb(
+                        state["seq"].get(seq_parameter_set_id, {}).get("log2-max-pic-order-cnt-lsb-minus-four", 0) + 4
+                    )
 
-                    if state.get("bottom-field-pic-order-in-frame-present-flag") and not nal.get("field-pic-flag"):
+                    if state["pic"].get(nal["pic-parameter-set-id"], {}).get(
+                        "bottom-field-pic-order-in-frame-present-flag"
+                    ) and not nal.get("field-pic-flag"):
                         nal["delta-pic-order-cnt-bottom"] = buf.rse()
-                if temp == 1 and not state.get("delta-pic-order-always-zero-flag"):
+                if temp == 1 and not state["seq"].get(seq_parameter_set_id, {}).get("delta-pic-order-always-zero-flag"):
                     nal["delta-pic-order-cnt"] = [buf.rse()]
 
-                    if state.get("bottom-field-pic-order-in-frame-present-flag") and not nal.get("field-pic-flag"):
+                    if state["pic"].get(nal["pic-parameter-set-id"], {}).get(
+                        "bottom-field-pic-order-in-frame-present-flag"
+                    ) and not nal.get("field-pic-flag"):
                         nal["delta-pic-order-cnt"].append(buf.rse())
 
-                if state.get("redundant-pic-cnt-present-flag"):
+                if state["pic"].get(nal["pic-parameter-set-id"], {}).get("redundant-pic-cnt-present-flag"):
                     nal["redundant-pic-cnt"] = buf.rue()
 
                 if nal["slice-type"] % 5 == 1:
@@ -545,11 +593,15 @@ class FFMpreg(object):
                             if nal["modification-of-pic-nums-idc"] == 3:
                                 break
 
-                if (state.get("weighted-pred-flag", 0) and nal["slice-type"] % 5 in (0, 3)) or (
-                    state.get("weighted-bipred-idc", 0) == 1 and nal["slice-type"] % 5 == 1
+                if (
+                    state["pic"].get(nal["pic-parameter-set-id"], {}).get("weighted-pred-flag", 0)
+                    and nal["slice-type"] % 5 in (0, 3)
+                ) or (
+                    state["pic"].get(nal["pic-parameter-set-id"], {}).get("weighted-bipred-idc", 0) == 1
+                    and nal["slice-type"] % 5 == 1
                 ):
                     nal["luma-log2-weight-denom"] = buf.rue()
-                    if state.get("chroma-array-type", 0) != 0:
+                    if state["seq"].get(seq_parameter_set_id, {}).get("chroma-array-type", 0) != 0:
                         nal["chroma-log2-weight-denom"] = buf.rue()
                     nal["luma-weight-l0-flag"] = {}
                     nal["luma-weight-l0"] = {}
@@ -559,13 +611,17 @@ class FFMpreg(object):
                     nal["chroma-offset-l0"] = {}
                     for i in range(
                         0,
-                        nal.get("num-ref-idx-l0-active-minus-one", state.get("num-ref-idx-l0-default-active-minus-one", 0)) + 1,
+                        nal.get(
+                            "num-ref-idx-l0-active-minus-one",
+                            state["pic"].get(nal["pic-parameter-set-id"], {}).get("num-ref-idx-l0-default-active-minus-one", 0),
+                        )
+                        + 1,
                     ):
                         nal["luma-weight-l0-flag"][i] = buf.rb(1)
                         if nal["luma-weight-l0-flag"][i]:
                             nal["luma-weight-l0"][i] = buf.rse()
                             nal["luma-offset-l0"][i] = buf.rse()
-                        if state.get("chroma-array-type", 0) != 0:
+                        if state["seq"].get(seq_parameter_set_id, {}).get("chroma-array-type", 0) != 0:
                             nal["chroma-weight-l0-flag"][i] = buf.rb(1)
                             if nal["chroma-weight-l0-flag"][i]:
                                 nal["chroma-weight-l0"][i] = {}
@@ -582,14 +638,19 @@ class FFMpreg(object):
                         nal["chroma-offset-l1"] = {}
                         for i in range(
                             0,
-                            nal.get("num-ref-idx-l0-active-minus-one", state.get("num-ref-idx-l0-default-active-minus-one", 0))
+                            nal.get(
+                                "num-ref-idx-l0-active-minus-one",
+                                state["pic"]
+                                .get(nal["pic-parameter-set-id"], {})
+                                .get("num-ref-idx-l0-default-active-minus-one", 0),
+                            )
                             + 1,
                         ):
                             nal["luma-weight-l1-flag"][i] = buf.rb(1)
                             if nal["luma-weight-l1-flag"][i]:
                                 nal["luma-weight-l1"][i] = buf.rse()
                                 nal["luma-offset-l1"][i] = buf.rse()
-                            if state.get("chroma-array-type", 0) != 0:
+                            if state["seq"].get(seq_parameter_set_id, {}).get("chroma-array-type", 0) != 0:
                                 nal["chroma-weight-l1-flag"][i] = buf.rb(1)
                                 if nal["chroma-weight-l1-flag"][i]:
                                     nal["chroma-weight-l1"][i] = {}
@@ -627,7 +688,9 @@ class FFMpreg(object):
                                 if nal["memory-management-control-operation"][-1] == 0:
                                     break
 
-                if state.get("entropy-coding-mode-flag", 0) and nal["slice-type"] % 5 not in (2, 4):
+                if state["pic"].get(nal["pic-parameter-set-id"], {}).get("entropy-coding-mode-flag", 0) and nal[
+                    "slice-type"
+                ] % 5 not in (2, 4):
                     nal["cabac-init-idc"] = buf.rue()
 
                 nal["slice-qp-delta"] = buf.rse()
@@ -637,22 +700,35 @@ class FFMpreg(object):
                         nal["sp-for-switch-flag"] = buf.rb(1)
                     nal["slice-qs-delta"] = buf.rse()
 
-                if state.get("deblocking-filter-control-present-flag", 0):
+                if state["pic"].get(nal["pic-parameter-set-id"], {}).get("deblocking-filter-control-present-flag", 0):
                     nal["disable-deblocking-filter-idc"] = buf.rue()
                     if nal["disable-deblocking-filter-idc"] != 1:
                         nal["slice-alpha-c0-offset-div2"] = buf.rse()
                         nal["slice-beta-offset-div2"] = buf.rse()
 
-                if state.get("num-slice-groups-minus-one", 0) > 0 and 3 <= state.get("slice-group-map-type", 0) <= 5:
+                if (
+                    state["pic"].get(nal["pic-parameter-set-id"], {}).get("num-slice-groups-minus-one", 0) > 0
+                    and 3 <= state.get("slice-group-map-type", 0) <= 5
+                ):
                     nal["slice-group-change-cycle"] = buf.rb(
                         math.ceil(
                             math.log2(
                                 (
                                     (
-                                        (state.get("pic-width-in-mbs-minus-one", 0) + 1)
-                                        * (state.get("pic-height-in-map-units-minus-one", 0) + 1)
+                                        (state["seq"].get(seq_parameter_set_id, {}).get("pic-width-in-mbs-minus-one", 0) + 1)
+                                        * (
+                                            state["seq"]
+                                            .get(seq_parameter_set_id, {})
+                                            .get("pic-height-in-map-units-minus-one", 0)
+                                            + 1
+                                        )
                                     )
-                                    / (state.get("slice-group-change-rate-minus-one", 0) + 1)
+                                    / (
+                                        state["pic"]
+                                        .get(nal["pic-parameter-set-id"], {})
+                                        .get("slice-group-change-rate-minus-one", 0)
+                                        + 1
+                                    )
                                 )
                                 + 1
                             )
