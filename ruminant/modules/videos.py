@@ -1560,6 +1560,12 @@ class IsoModule(module.RuminantModule):
                 ranges = utils.expand_ranges(secrets.get_parameter("0", data, "ranges"), 0, len(sample_to_offset) - 1)
                 data["samples"] = {}
 
+                state = {}
+
+                for nal in avcC["data"]["sequence-parameter-sets"] + avcC["data"]["picture-parameter-sets"] + avcC["data"].get("sequence-parameter-ext-sets", []):
+                    self.buf.seek(nal["offset"])
+                    FFMpreg.read_h264_nalu(self.buf, slim=True, state=state)
+
                 for index in ranges:
                     self.buf.seek(sample_to_offset[index])
                     self.buf.pasunit(sample_sizes[index])
@@ -1571,7 +1577,7 @@ class IsoModule(module.RuminantModule):
 
                         self.buf.pasunit(nalu["length"])
 
-                        nalu["payload"] = FFMpreg.read_h264_nalu(self.buf, slim=True)
+                        nalu["payload"] = FFMpreg.read_h264_nalu(self.buf, slim=True, state=state)
 
                         self.buf.sapunit()
 
@@ -2285,6 +2291,8 @@ class MatroskaModule(module.RuminantModule):
                         self.buf.seek(codec_privates[stream["id"]]["data-offset"])
                         self.buf.pasunit(codec_privates[stream["id"]]["length"])
 
+                        state = {}
+
                         parsed["configuration-version"] = self.buf.ru8()
                         parsed["avc-profile-indication"] = self.buf.ru8()
                         parsed["profile-compatibility"] = self.buf.ru8()
@@ -2297,14 +2305,14 @@ class MatroskaModule(module.RuminantModule):
                         parsed["sequence-parameter-sets"] = []
                         for i in range(0, parsed["sequence-parameter-set-count"]):
                             self.buf.pasunit(self.buf.ru16())
-                            parsed["sequence-parameter-sets"].append(FFMpreg.read_h264_nalu(self.buf))
+                            parsed["sequence-parameter-sets"].append(FFMpreg.read_h264_nalu(self.buf, state=state))
                             self.buf.sapunit()
 
                         parsed["picture-parameter-set-count"] = self.buf.ru8()
                         parsed["picture-parameter-sets"] = []
                         for i in range(0, parsed["picture-parameter-set-count"]):
                             self.buf.pasunit(self.buf.ru16())
-                            parsed["picture-parameter-sets"].append(FFMpreg.read_h264_nalu(self.buf))
+                            parsed["picture-parameter-sets"].append(FFMpreg.read_h264_nalu(self.buf, state=state))
                             self.buf.sapunit()
 
                         if (
@@ -2322,7 +2330,7 @@ class MatroskaModule(module.RuminantModule):
                             parsed["sequence-parameter-ext-sets"] = []
                             for i in range(0, parsed["sequence-parameter-set-ext-count"]):
                                 self.buf.pasunit(self.buf.ru16())
-                                parsed["sequence-parameter-ext-sets"].append(FFMpreg.read_h264_nalu(self.buf))
+                                parsed["sequence-parameter-ext-sets"].append(FFMpreg.read_h264_nalu(self.buf, state=state))
                                 self.buf.sapunit()
 
                         codec_privates[stream["id"]]["parsed"] = parsed
@@ -2342,7 +2350,7 @@ class MatroskaModule(module.RuminantModule):
 
                             self.buf.pasunit(nalu["length"])
 
-                            nalu["payload"] = FFMpreg.read_h264_nalu(self.buf, slim=True)
+                            nalu["payload"] = FFMpreg.read_h264_nalu(self.buf, slim=True, state=state)
 
                             self.buf.sapunit()
 
