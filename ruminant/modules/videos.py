@@ -1562,7 +1562,11 @@ class IsoModule(module.RuminantModule):
 
                 state = {}
 
-                for nal in avcC["data"]["sequence-parameter-sets"] + avcC["data"]["picture-parameter-sets"] + avcC["data"].get("sequence-parameter-ext-sets", []):
+                for nal in (
+                    avcC["data"]["sequence-parameter-sets"]
+                    + avcC["data"]["picture-parameter-sets"]
+                    + avcC["data"].get("sequence-parameter-ext-sets", [])
+                ):
                     self.buf.seek(nal["offset"])
                     FFMpreg.read_h264_nalu(self.buf, slim=True, state=state)
 
@@ -2291,7 +2295,7 @@ class MatroskaModule(module.RuminantModule):
                         self.buf.seek(codec_privates[stream["id"]]["data-offset"])
                         self.buf.pasunit(codec_privates[stream["id"]]["length"])
 
-                        state = {}
+                        state: dict = {}
 
                         parsed["configuration-version"] = self.buf.ru8()
                         parsed["avc-profile-indication"] = self.buf.ru8()
