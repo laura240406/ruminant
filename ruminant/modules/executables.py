@@ -2229,6 +2229,8 @@ class PeModule(module.RuminantModule):
                         self.seek_vaddr(rva["parsed"]["metadata"]["base"]["raw"])
                         self.buf.setunit(rva["parsed"]["metadata"]["size"]["raw"])
 
+                        table_base = self.buf.tell()
+
                         self.buf.skip(4)
                         table: dict = {}
                         table["major-version"] = self.buf.ru16l()
@@ -2253,10 +2255,28 @@ class PeModule(module.RuminantModule):
                         self.buf.sapunit()
 
                         for stream in table["streams"]:
-                            self.seek_vaddr(stream["offset"])
+                            self.buf.seek(table_base + stream["offset"])
                             self.buf.pasunit(stream["size"])
 
-                            # TODO
+                            match stream["name"]:
+                                case "#~":
+                                    stream["reserved0"] = self.buf.ru32l()
+                                    stream["major-version"] = self.buf.ru8()
+                                    stream["minor-version"] = self.buf.ru8()
+                                    stream["heap-index-sizes"] = self.buf.ru8()
+                                    stream["reserved1"] = self.buf.ru8()
+                                    stream["present"] = self.buf.ru64l()
+                                    stream["sorted"] = self.buf.ru64l()
+
+                                    stream["rows"] = {}
+                                    for i in range(0, 64):
+                                        if stream["present"] & (1 << i):
+                                            stream["rows"][i] = self.buf.ru32l()
+                                case _:
+                                    with self.buf.subunit():
+                                        stream["payload"] = chew(self.buf)
+
+                                    stream["unknown"] = True
 
                             self.buf.sapunit()
                     case "Debug":
