@@ -12,9 +12,15 @@ for root, _, files in os.walk(os.path.join(os.path.dirname(os.path.dirname(__fil
             lines = f.read().split("\n")
 
             for line in lines:
-                content += line.strip()
+                line = line.strip()
+
+                if line:
+                    content += line + " "
                 bar.update(1)
 
 bar.close()
 
 print(f"{len(content)} character(s).")
+
+with open("/tmp/ruminant.txt", "w") as f:
+    f.write(content)
