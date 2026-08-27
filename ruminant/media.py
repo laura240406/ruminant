@@ -250,15 +250,30 @@ class FFMpreg(object):
 
         match nal["unit-type"]:
             case "Sequence parameter set":
-                # ISO/IEC 14496-10:2022 page 59
-                nal["profile-idc"] = buf.ru8()
+                # ISO/IEC 14496-10:2022 page 59\
+                profile_idc = buf.ru8()
+                nal["profile-idc"] = utils.unraw(
+                    profile_idc,
+                    1,
+                    {
+                        44: "CAVLC 4:4:4 Intra",
+                        66: "Baseline",
+                        77: "Main",
+                        88: "Extended",
+                        100: "High",
+                        110: "High 10",
+                        122: "High 4:2:2",
+                        244: "High 4:4:4",
+                    },
+                    True,
+                )
                 nal["constraint-set-flags"] = [buf.rb(1) for i in range(0, 6)]
                 nal["reserved"] = buf.rb(2)
                 nal["level-idc"] = buf.ru8()
                 nal["seq-parameter-set-id"] = buf.rue()
                 state["seq"][nal["seq-parameter-set-id"]] = {}
 
-                if nal["profile-idc"] in (
+                if profile_idc in (
                     44,
                     83,
                     86,
@@ -274,17 +289,20 @@ class FFMpreg(object):
                     144,
                     244,
                 ):
-                    nal["chroma-format-idc"] = buf.rue()
-                    state["seq"][nal["seq-parameter-set-id"]]["chroma-format-idc"] = nal["chroma-format-idc"]
+                    chroma_format_idc = buf.rue()
+                    nal["chroma-format-idc"] = utils.unraw(
+                        chroma_format_idc, 1, {0: "monochrome", 1: "4:2:0", 2: "4:2:2", 3: "4:4:4"}, True
+                    )
+                    state["seq"][nal["seq-parameter-set-id"]]["chroma-format-idc"] = chroma_format_idc
 
-                    if nal["chroma-format-idc"] == 3:
+                    if chroma_format_idc == 3:
                         nal["separate-colour-plane-flag"] = buf.rb(1)
                         state["seq"][nal["seq-parameter-set-id"]]["separate-colour-plane-flag"] = nal[
                             "separate-colour-plane-flag"
                         ]
 
                     state["seq"][nal["seq-parameter-set-id"]]["chroma-array-type"] = (
-                        0 if nal.get("separate-colour-plane-flag", 0) else nal["chroma-format-idc"]
+                        0 if nal.get("separate-colour-plane-flag", 0) else chroma_format_idc
                     )
 
                     nal["bit-depth-luma-minus-eight"] = buf.rue()
@@ -294,7 +312,7 @@ class FFMpreg(object):
 
                     if nal["seq-scaling-matrix-present-flag"]:
                         nal["seq-scaling-matrices"] = []
-                        for i in range(0, 12 if nal["chroma-format-idc"] == 3 else 8):
+                        for i in range(0, 12 if chroma_format_idc == 3 else 8):
                             matrix = []
                             if buf.rb(1):
                                 matrix = FFMpreg.read_h264_scaling_list(buf, 16 if i < 6 else 64)
