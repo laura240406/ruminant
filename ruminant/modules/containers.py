@@ -396,7 +396,7 @@ class ZipModule(module.RuminantModule):
                 entry["type"] = None
                 entry["length"] = self.buf.ru16l()
                 payload: dict = {}
-                payload = payload
+                entry["payload"] = payload
 
                 self.buf.pasunit(entry["length"])
                 match typ:
