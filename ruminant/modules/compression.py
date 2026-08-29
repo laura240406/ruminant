@@ -271,14 +271,14 @@ class ZlibModule(module.RuminantModule):
         meta: dict = {}
         meta["type"] = "zlib"
         meta["compression-type"] = utils.unraw(
-            self.buf.ru16() & 0xff,
+            self.buf.pu16() & 0xff,
             1,
             {0x01: "none", 0x53: "fast", 0x9c: "default", 0xda: "best"},
             True,
         )
 
         fd = utils.tempfd()
-        utils.stream_zlib(self.buf, fd, self.buf.available())
+        utils.stream_zlib(self.buf, fd, self.buf.available(), revert=True)
         fd.seek(0)
         meta["data"] = chew(fd)
 
