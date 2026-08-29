@@ -10,6 +10,7 @@ import binascii
 import base64
 import json
 import math
+import io
 
 
 debug = module.debug
@@ -1956,5 +1957,145 @@ class MicrosoftPrinterSettingsModule(module.RuminantModule):
             meta["driver-extra"] = chew(self.buf, blob_mode=True)
 
         self.buf.sapunit()
+
+        return meta
+
+
+@module.register
+class MindustrySchematicModule(module.RuminantModule):
+    desc = "Mindustry schematic files."
+
+    @staticmethod
+    def identify(buf: Buf, ctx={}) -> bool:
+        return buf.peek(4) == b"msch"
+
+    def read_object(self, buf):
+        typ = buf.ru8()
+
+        match typ:
+            case 0:
+                return None
+            case 1:
+                return buf.ri32()
+            case 2:
+                return buf.ri64()
+            case 3:
+                return buf.rf32()
+            case 4:
+                if buf.ru8():
+                    return buf.rs(buf.ru16())
+            case 5:
+                return (buf.ri8(), buf.ri16())
+            case 6:
+                return [buf.ri32() for i in range(0, buf.ru16())]
+            case 7:
+                return (buf.ri32(), buf.ri32())
+            case 8:
+                return [(buf.ri16(), buf.ri16()) for i in range(0, buf.ru8())]
+            case 9:
+                return (buf.ri8(), buf.ri16())
+            case 10:
+                return bool(buf.ru8())
+            case 11:
+                return buf.rf64()
+            case 12:
+                return buf.ri32()
+            case 13:
+                return buf.ri16()
+            case 14:
+                return buf.rh(buf.ru32())
+            case 15:
+                return buf.ri8()
+            case 16:
+                return [bool(buf.ru8()) for i in range(0, buf.ru8())]
+            case 17:
+                return buf.ri32()
+            case 18:
+                return [(buf.rf32(), buf.rf32()) for i in range(0, buf.ru16())]
+            case 19:
+                return (buf.rf32(), buf.rf32())
+            case 20:
+                return buf.ru8()
+            case 21:
+                return [buf.ri32() for i in range(0, buf.ru16())]
+            case 22:
+                return [self.read_object(buf) for i in range(0, buf.ru32())]
+            case 23:
+                return buf.ru16()
+            case _:
+                raise ValueError(f"Unknown object type {typ}")
+
+    def read_logic(self, buf):
+        logic = {}
+        logic["version"] = buf.ru8()
+        logic["code"] = buf.rs(buf.ru32()).split("\n")
+
+        total = buf.ru32()
+        if logic["version"] == 0:
+            logic["links"] = [buf.ru32() for i in range(0, total)]
+        else:
+            logic["links"] = []
+
+            for i in range(0, total):
+                link = {}
+                link["name"] = buf.rs(buf.ru16())
+                link["x"] = buf.ri16()
+                link["y"] = buf.ri16()
+
+                logic["links"].append(link)
+
+        return logic
+
+    def chew(self) -> ruminant_types.JSON:
+        meta: dict = {}
+        meta["type"] = "mindustry-schematic"
+
+        self.buf.skip(4)
+        meta["version"] = self.buf.ru8()
+
+        if meta["version"] not in (0, 1):
+            meta["unknown"] = True
+            return meta
+
+        blob = io.BytesIO()
+        utils.stream_zlib(self.buf, blob, self.buf.available(), revert=True)
+        blob.seek(0)
+        buf = Buf(blob)
+
+        meta["width"] = buf.ru16()
+        meta["height"] = buf.ru16()
+
+        meta["tags"] = {}
+        for i in range(0, buf.ru8()):
+            name = buf.rs(buf.ru16())
+            meta["tags"][name] = buf.rs(buf.ru16())
+
+            match name:
+                case "contentMap" | "labels":
+                    meta["tags"][name] = json.loads(meta["tags"][name])
+
+        meta["blocks"] = []
+        for i in range(0, buf.ru8()):
+            meta["blocks"].append(buf.rs(buf.ru16()))
+
+        meta["total"] = buf.ru32()
+
+        meta["tiles"] = []
+        for i in range(0, meta["total"]):
+            tile = {}
+            tile["block"] = meta["blocks"][buf.ru8()]
+            tile["position"] = (buf.ru16(), buf.ru16())
+
+            if meta["version"] == 0:
+                tile["config"] = self.buf.ru32()
+            else:
+                tile["config"] = self.read_object(buf)
+
+                if tile["block"] == "micro-processor":
+                    tile["config"] = self.read_logic(Buf(zlib.decompress(bytes.fromhex(tile["config"]))))
+
+            tile["rotation"] = buf.ru8()
+
+            meta["tiles"].append(tile)
 
         return meta

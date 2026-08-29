@@ -134,6 +134,7 @@ Ruminant is still in early alpha but it can already process the following file t
 * H.264 JVT NAL sequence files
 * Microsoft DEVMODEW printerSettings1.bin files
 * PYC python bytecode files
+* Mindustry schematics
 
 # How do I install it?
 Run `pip3 install ruminant`.
