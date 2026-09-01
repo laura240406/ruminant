@@ -1,6 +1,7 @@
 import math
 from . import utils
 from .buf import Buf
+from .modules import chew
 
 
 class FFMpreg(object):
@@ -2417,6 +2418,196 @@ class FFMpreg(object):
             frame["crc"] = buf.ru16()
 
         buf.sapunit()
+
+        return frame
+
+    @staticmethod
+    def read_mpeg2_frame(buf: Buf) -> dict:
+        frame: dict = {}
+        frame["offset"] = buf.tell()
+
+        buf.skip(3)
+        buf = Buf(buf.read(buf.unit).replace(b"\x00\x00\x03", b"\x00\x00"))
+
+        typ = buf.ru8()
+
+        if typ >= 1 and typ <= 0xaf:
+            frame["type"] = f"Slice Row {typ}"
+        else:
+            frame["type"] = utils.unraw(
+                typ,
+                1,
+                {
+                    0x00: "Picture Start",
+                    0xb2: "User Data",
+                    0xb3: "Sequence Header",
+                    0xb5: "Extension",
+                    0xb8: "Group of Pictures",
+                },
+                True,
+            )
+
+        match frame["type"]:
+            case "Sequence Header":
+                frame["horizontal-size"] = buf.rb(12)
+                frame["vertical-size"] = buf.rb(12)
+                frame["aspect-ratio"] = utils.unraw(
+                    buf.rb(4), 1, {0b0001: "1:1", 0b0010: "4:3", 0b0011: "16:9", 0b0100: "2.21:1"}, True
+                )
+                frame["framerate"] = utils.unraw(
+                    buf.rb(4),
+                    1,
+                    {
+                        0b0001: "23.976",
+                        0b0010: "24",
+                        0b0011: "25",
+                        0b0100: "29.97",
+                        0b0101: "30",
+                        0b0110: "50",
+                        0b0111: "59.94",
+                        0b1000: "60",
+                    },
+                    True,
+                )
+                frame["bitrate"] = buf.rb(18)
+                frame["marker"] = buf.rb(1)
+                frame["vbv-buffer-size"] = buf.rb(10)
+                frame["constrained-parameters"] = buf.rb(1)
+                frame["load-intra-quantizer-matrix"] = buf.rb(1)
+
+                if frame["load-intra-quantizer-matrix"]:
+                    frame["intra-quantizer-matrix"] = hex(buf.rb(512))[2:].zfill(128)
+
+                frame["load-non-intra-quantizer-matrix"] = buf.rb(1)
+
+                if frame["load-non-intra-quantizer-matrix"]:
+                    frame["non-intra-quantizer-matrix"] = hex(buf.rb(512))[2:].zfill(128)
+            case "Extension":
+                frame["extension-type"] = utils.unraw(
+                    buf.rb(4),
+                    1,
+                    {
+                        0x01: "Sequence",
+                        0x02: "Sequence Display",
+                        0x03: "Quant Matrix",
+                        0x04: "Sequence Scalable",
+                        0x07: "Picture Display",
+                        0x08: "Picture Coding",
+                        0x09: "Picture Spatial",
+                        0x0a: "Picture Temporal",
+                    },
+                    True,
+                )
+
+                match frame["extension-type"]:
+                    case "Sequence":
+                        if buf.rb(1):
+                            frame["profile-and-level-indication"] = utils.unraw(
+                                buf.rb(7),
+                                1,
+                                {
+                                    0b0000010: "4:2:2 Profile @ Main Level",
+                                    0b0000101: "Multi-view Profile @ Low Level",
+                                    0b0000100: "Multi-view Profile @ Main Level",
+                                    0b0000011: "Multi-view Profile @ High-1440 Level",
+                                    0b0000001: "Multi-view Profile @ High Level",
+                                    0b0001110: "4:2:2 Profile @ High Level",
+                                },
+                            )
+                        else:
+                            frame["profile-and-level-indication"] = {
+                                "profile": utils.unraw(
+                                    buf.rb(3),
+                                    1,
+                                    {
+                                        0b001: "High Profile",
+                                        0b010: "Spatially Scalable Profile",
+                                        0b011: "SNR Scalable Profile",
+                                        0b100: "Main Profile",
+                                        0b101: "Simple Profile",
+                                    },
+                                ),
+                                "level": utils.unraw(
+                                    buf.rb(4),
+                                    1,
+                                    {
+                                        0b0100: "High Level",
+                                        0b0110: "High-1440 Level",
+                                        0b1000: "Main Level",
+                                        0b1010: "Low Level",
+                                    },
+                                ),
+                            }
+                        frame["progressive-sequence"] = buf.rb(1)
+                        frame["chroma-format"] = utils.unraw(buf.rb(2), 1, {0b01: "4:2:0", 0b10: "4:2:2", 0b11: "4:4:4"})
+                        frame["horizontal-size-extension"] = buf.rb(2)
+                        frame["vertical-size-extension"] = buf.rb(2)
+                        frame["bit-rate-extension"] = buf.rb(12)
+                        frame["marker-bit"] = buf.rb(1)
+                        frame["vbv-buffer-size-extension"] = buf.rb(8)
+                        frame["low-delay"] = buf.rb(1)
+                        frame["frame-rate-extension-n"] = buf.rb(2)
+                        frame["frame-rate-extension-d"] = buf.rb(5)
+                    case "Picture Coding":
+                        frame["f_code"] = bin(buf.rb(16))[2:].zfill(16)
+                        frame["intra_dc_precision"] = buf.rb(2) + 8
+                        frame["picture_structure"] = buf.rb(2)
+                        frame["top_field_first"] = buf.rb(1)
+                        frame["frame_pred_frame_dct"] = buf.rb(1)
+                        frame["concealment_motion_vectors"] = buf.rb(1)
+                        frame["q_scale_type"] = buf.rb(1)
+                        frame["intra_vlc_format"] = buf.rb(1)
+                        frame["alternate_scan"] = buf.rb(1)
+                        frame["repeat_first_field"] = buf.rb(1)
+                        frame["chroma_420_type"] = buf.rb(1)
+                        frame["progressive_frame"] = buf.rb(1)
+                        frame["composite_display_flag"] = buf.rb(1)
+                        buf._bits = 0
+                        frame["rest"] = buf.rh(buf.unit)
+                    case _:
+                        frame["unknown"] = True
+            case "Group of Pictures":
+                frame["drop-frame-flag"] = buf.rb(1)
+                frame["time-code-hours"] = buf.rb(5)
+                frame["time-code-minutes"] = buf.rb(6)
+                frame["marker-bit"] = buf.rb(1)
+                frame["time-code-seconds"] = buf.rb(6)
+                frame["time-code-pictures"] = buf.rb(6)
+                frame["closed-gop"] = buf.rb(1)
+                frame["broken-link"] = buf.rb(1)
+            case "Picture Start":
+                frame["temporal_reference"] = buf.rb(10)
+                frame["picture_coding_type"] = utils.unraw(
+                    buf.rb(3),
+                    1,
+                    {
+                        0b001: "Intra-coded frame",
+                        0b010: "Predictive-coded frame",
+                        0b011: "Bidirectionally predictive-coded frame",
+                        0b100: "DC intra-coded frame",
+                    },
+                    True,
+                )
+                frame["vbv_delay"] = buf.rb(16)
+
+                if frame["picture_coding_type"] in ("Predictive-coded frame", "Bidirectionally predictive-coded frame"):
+                    frame["full_pel_forward_vector"] = buf.rb(1)
+                    frame["forward_f_code"] = buf.rb(3)
+
+                if frame["picture_coding_type"] == "Bidirectionally predictive-coded frame":
+                    frame["full_pel_backward_vector"] = buf.rb(1)
+                    frame["backward_f_code"] = buf.rb(3)
+
+                extra = b""
+                while buf.rb(1):
+                    extra += bytes([buf.rb(8)])
+
+                frame["extra"] = extra.hex()
+            case "User Data":
+                frame["user-data"] = buf.rh(buf.unit)
+            case _:
+                frame["blob"] = chew(buf)
+                frame["unknown"] = True
 
         return frame
 

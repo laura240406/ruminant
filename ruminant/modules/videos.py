@@ -3542,6 +3542,7 @@ class MpegTsModule(module.RuminantModule):
             meta["streams"][pid]["samples"] = {}
             for index in ranges:
                 sample: dict = {}
+                offsets: list[int] = []
 
                 # BOOK New MPEG-TS handler
                 match self.es[pid][0]:
@@ -3609,16 +3610,14 @@ class MpegTsModule(module.RuminantModule):
                     case 36:
                         buf = Buf(ess[index]["blob"][ess[index]["header"]["length"] :])
 
-                        offsets = []
                         while buf.available() > 3:
-                            while buf.available() > 3 and buf.peek(3) != b"\x00\x00\x01":
+                            if buf.peek(3) == b"\x00\x00\x01":
+                                offsets.append(buf.tell())
+                                buf.skip(3)
+                            else:
                                 buf.skip(1)
 
-                            offsets.append(buf.tell())
-                            buf.skip(3)
-
                         offsets.append(buf.tell())
-                        buf.seek(0)
 
                         sample["nalus"] = []
                         if len(offsets) > 1:
@@ -3637,6 +3636,27 @@ class MpegTsModule(module.RuminantModule):
                             sample["frames"].append(FFMpreg.read_aac_frame(buf))
                     case 21:
                         sample["tag"] = chew(Buf(ess[index]["blob"][ess[index]["header"]["length"] :]))
+                    case 2:
+                        buf = Buf(ess[index]["blob"][ess[index]["header"]["length"] :])
+
+                        while buf.available() > 3:
+                            if buf.peek(3) == b"\x00\x00\x01":
+                                offsets.append(buf.tell())
+                                buf.skip(3)
+                            else:
+                                buf.skip(1)
+
+                        offsets.append(buf.tell())
+
+                        sample["frames"] = []
+                        if len(offsets) > 1:
+                            for i in range(0, len(offsets) - 1):
+                                buf.seek(offsets[i])
+                                buf.pasunit(offsets[i + 1] - offsets[i])
+
+                                sample["frames"].append(FFMpreg.read_mpeg2_frame(buf))
+
+                                buf.sapunit()
                     case _:
                         sample["blob"] = chew(ess[index]["blob"])
                         meta["streams"][pid]["unknown"] = True
