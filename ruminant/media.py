@@ -2240,7 +2240,7 @@ class FFMpreg(object):
         frame["emphasis"] = buf.rb(2)
 
         if frame["protection-bit"] == 0:
-            frame["crc"] = buf.rb(16)
+            frame["crc"] = buf.pb(16)
 
         try:
             frame["length"] = (144 * frame["bitrate"] // frame["sampling-rate"]) + frame["padding-bit"]
@@ -2347,6 +2347,9 @@ class FFMpreg(object):
         frame["copyrighted"] = bool(buf.rb(1))
         frame["original"] = bool(buf.rb(1))
         frame["emphasis"] = buf.rb(2)
+
+        if frame["error-protection"]:
+            frame["crc"] = buf.pb(16)
 
         buf.skip(
             ((144 if frame["version"] == "MPEG-1" else 72) * frame["bitrate"] * 1000) // frame["frequency"]
