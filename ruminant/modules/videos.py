@@ -2897,7 +2897,7 @@ class MatroskaModule(module.RuminantModule):
 
                         stream["samples"][index] = []
                         while self.buf.hasunit():
-                            stream["samples"][index].append(FFMpreg.read_dvbsub(self.buf))
+                            stream["samples"][index].append(FFMpreg.read_dvbsub_packet(self.buf))
 
                         self.buf.sapunit()
                 case "A_AC3":
@@ -3574,7 +3574,7 @@ class MpegTsModule(module.RuminantModule):
 
                                 sample["ops"] = []
                                 while buf.hasunit(4):
-                                    sample["ops"].append(FFMpreg.read_dvbsub(buf))
+                                    sample["ops"].append(FFMpreg.read_dvbsub_packet(buf))
                             case "ac-3":
                                 sample["frames"] = []
                                 while buf.hasunit():
@@ -3621,7 +3621,7 @@ class MpegTsModule(module.RuminantModule):
                             buf.seek(offset)
                             buf.pasunit(length)
 
-                            sample["frames"].append(FFMpreg.read_mpeg2_frame(buf))
+                            sample["frames"].append(FFMpreg.read_mpeg2_packet(buf))
 
                             buf.sapunit()
                     case _:

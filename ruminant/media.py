@@ -5,6 +5,8 @@ from .modules import chew
 
 
 class FFMpreg(object):
+    """Media helper class"""
+
     H264_NAL_UNIT_TYPES = {
         0x00: "Unspecified",
         0x01: "Coded slice of a non-IDR picture",
@@ -227,6 +229,7 @@ class FFMpreg(object):
 
     @staticmethod
     def read_h264_nalu(buf: Buf, slim=False, state={}) -> dict:
+        """Read a H.264 NAL unit"""
         nal = {}
         nal["offset"] = buf.tell()
 
@@ -1126,6 +1129,7 @@ class FFMpreg(object):
 
     @staticmethod
     def read_h265_nalu(buf: Buf, state={}) -> dict:
+        """Read a H.265 NAL unit"""
         nal = {}
         nal["offset"] = buf.tell()
 
@@ -1616,6 +1620,7 @@ class FFMpreg(object):
 
     @staticmethod
     def read_h266_nalu(buf: Buf, state={}) -> dict:
+        """Read a H.266 NAL unit"""
         nal = {}
         nal["offset"] = buf.tell()
 
@@ -1639,6 +1644,7 @@ class FFMpreg(object):
 
     @staticmethod
     def read_av1_obu(buf: Buf, state={}) -> dict:
+        """Read an AV1 OBU"""
         obu = {}
         obu["offset"] = buf.tell()
         obu["forbidden-bit"] = buf.rb(1)
@@ -1853,6 +1859,7 @@ class FFMpreg(object):
 
     @staticmethod
     def read_av2_obu(buf: Buf, state={}) -> dict:
+        """Read an AV2 OBU"""
         obu = {}
         obu["offset"] = buf.tell()
         obu["length"] = buf.ruleb()
@@ -1882,7 +1889,8 @@ class FFMpreg(object):
         return obu
 
     @staticmethod
-    def read_dvbsub(buf: Buf) -> dict:
+    def read_dvbsub_packet(buf: Buf) -> dict:
+        """Read a DVB subtitle packet"""
         # BOOK New FFMpreg DVBSUB type
         op = {}
 
@@ -1979,6 +1987,7 @@ class FFMpreg(object):
 
     @staticmethod
     def read_ac3_frame(buf: Buf) -> dict:
+        """Read an AC3 frame"""
         AC3_FRAME_SIZES = [
             [
                 64,
@@ -2183,6 +2192,7 @@ class FFMpreg(object):
 
     @staticmethod
     def read_mp2_frame(buf: Buf) -> dict:
+        """Read a MP2 frame"""
         frame = {}
 
         # actually MP3
@@ -2255,6 +2265,7 @@ class FFMpreg(object):
 
     @staticmethod
     def read_mp3_frame(buf: Buf) -> dict:
+        """Read a MP3 frame"""
         frame = {}
 
         # actually MP2
@@ -2362,6 +2373,7 @@ class FFMpreg(object):
 
     @staticmethod
     def read_aac_frame(buf: Buf) -> dict:
+        """Read an AAC frame"""
         frame = {}
 
         buf.rb(12)
@@ -2422,7 +2434,8 @@ class FFMpreg(object):
         return frame
 
     @staticmethod
-    def read_mpeg2_frame(buf: Buf) -> dict:
+    def read_mpeg2_packet(buf: Buf) -> dict:
+        """Read a MPEG2 packet"""
         frame: dict = {}
         frame["offset"] = buf.tell()
 
@@ -2613,6 +2626,7 @@ class FFMpreg(object):
 
     @staticmethod
     def find_start_codes(buf: Buf) -> list[tuple[int, int]]:
+        """Scan the unit for occurences os the 000001 MPEG start code and return pairs of offset and length of each section"""
         bak = buf.backup()
         if buf.unit is None:
             buf.setunit(buf.available())
