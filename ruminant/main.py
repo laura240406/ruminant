@@ -41,6 +41,7 @@ def walk_helper(path, filename_regex):
 
 
 slim = False
+shallow = False
 to_extract: list[tuple[int, str]] = []
 extract_all: bool = False
 parameters: dict = {}
@@ -93,26 +94,34 @@ def process(file, walk):
             with mm:
                 if slim:
                     return json.dumps(
-                        modules.chew(mm, blob_callback=blob_callback(to_extract, extract_all), parameters=parameters),
+                        modules.chew(
+                            mm, blob_callback=blob_callback(to_extract, extract_all), parameters=parameters, shallow=shallow
+                        ),
                         separators=(",", ":"),
                         ensure_ascii=False,
                     )
                 else:
                     return json.dumps(
-                        modules.chew(mm, blob_callback=blob_callback(to_extract, extract_all), parameters=parameters),
+                        modules.chew(
+                            mm, blob_callback=blob_callback(to_extract, extract_all), parameters=parameters, shallow=shallow
+                        ),
                         indent=2,
                         ensure_ascii=False,
                     )
         else:
             if slim:
                 return json.dumps(
-                    modules.chew(file, blob_callback=blob_callback(to_extract, extract_all), parameters=parameters),
+                    modules.chew(
+                        file, blob_callback=blob_callback(to_extract, extract_all), parameters=parameters, shallow=shallow
+                    ),
                     separators=(",", ":"),
                     ensure_ascii=False,
                 )
             else:
                 return json.dumps(
-                    modules.chew(file, blob_callback=blob_callback(to_extract, extract_all), parameters=parameters),
+                    modules.chew(
+                        file, blob_callback=blob_callback(to_extract, extract_all), parameters=parameters, shallow=shallow
+                    ),
                     indent=2,
                     ensure_ascii=False,
                 )
@@ -127,7 +136,9 @@ def process(file, walk):
 
         with buf:
             try:
-                entry = modules.chew(file, True, blob_callback=blob_callback(to_extract, extract_all), parameters=parameters)
+                entry = modules.chew(
+                    file, True, blob_callback=blob_callback(to_extract, extract_all), parameters=parameters, shallow=shallow
+                )
                 assert entry["type"] != "unknown"
             except Exception:
                 entry = None
@@ -190,7 +201,7 @@ def process(file, walk):
 
 
 def main(dev=False):
-    global has_tqdm, args, extract_all
+    global has_tqdm, args, extract_all, shallow
 
     if sys.platform == "linux":
         # register SIGUSR1 handler that dumps the stacktrace to stderr
@@ -338,9 +349,6 @@ def main(dev=False):
         has_tqdm = args.progress
         print_filenames = args.progress_names
 
-    if args.shallow:
-        modules.shallow = True
-
     if args.extract_all:
         extract_all = True
         if not os.path.isdir("blobs"):
@@ -414,8 +422,9 @@ def main(dev=False):
         if args.file == "-":
             args.file = "/dev/stdin"
 
-    global slim
+    global slim, shallow
     slim = args.slim
+    shallow = args.shallow
 
     # /dev/stdin isn't seekable so we copy it into a temporary file
     if args.file == "/dev/stdin":

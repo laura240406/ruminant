@@ -111,11 +111,21 @@ def chew(
     first = state_stack.get() is None
 
     if first:
-        token = state_stack.set({"blob-id": 0, "blob-callback": blob_callback, "parameters": parameters, "parameter-index": 0})
+        token = state_stack.set({
+            "blob-id": 0,
+            "blob-callback": blob_callback,
+            "parameters": parameters,
+            "parameter-index": 0,
+            "shallow": shallow,
+        })
 
     try:
         return EntryModule(
-            walk_mode, blob_mode or (shallow and state_stack.get()["blob-id"]), flat, extra_ctx, Buf.of(blob)
+            walk_mode,
+            blob_mode or (state_stack.get()["shallow"] and state_stack.get()["blob-id"]),
+            flat,
+            extra_ctx,
+            Buf.of(blob),
         ).chew()
     finally:
         if first:
