@@ -3567,18 +3567,31 @@ class MpegTsModule(module.RuminantModule):
                                 case "AC-3 Descriptor":
                                     mode = "ac-3"
 
+                        if (
+                            mode is None
+                            and ess[index]["header"]["steam-id"] == "Private stream 1"
+                            and buf.pu24() & 0xf0ffff in (0x10022c, 0x10032c, 0x10ff2c)
+                        ):
+                            mode = "teletext"
+
                         match mode:
                             case "sub":
                                 sample["data-identifier"] = buf.ru8()
                                 sample["subtitle-stream-id"] = buf.ru8()
 
-                                sample["ops"] = []
+                                sample["packets"] = []
                                 while buf.hasunit(4):
-                                    sample["ops"].append(FFMpreg.read_dvbsub_packet(buf))
+                                    sample["packets"].append(FFMpreg.read_dvbsub_packet(buf))
                             case "ac-3":
                                 sample["frames"] = []
                                 while buf.hasunit():
                                     sample["frames"].append(FFMpreg.read_ac3_frame(buf))
+                            case "teletext":
+                                sample["data-identifier"] = buf.ru8()
+
+                                sample["packets"] = []
+                                while buf.hasunit():
+                                    sample["packets"].append(FFMpreg.read_teletext_packet(buf))
                             case _:
                                 sample["blob"] = chew(ess[index]["blob"])
                                 meta["streams"][pid]["unknown"] = True
@@ -3616,16 +3629,18 @@ class MpegTsModule(module.RuminantModule):
                     case 2:
                         buf = Buf(ess[index]["blob"][ess[index]["header"]["length"] :])
 
-                        sample["frames"] = []
+                        sample["packets"] = []
                         for offset, length in FFMpreg.find_start_codes(buf):
                             buf.seek(offset)
                             buf.pasunit(length)
 
-                            sample["frames"].append(FFMpreg.read_mpeg2_packet(buf))
+                            sample["packets"].append(FFMpreg.read_mpeg2_packet(buf))
 
                             buf.sapunit()
                     case _:
-                        sample["blob"] = chew(ess[index]["blob"])
+                        buf = Buf(ess[index]["blob"][ess[index]["header"]["length"] :])
+
+                        sample["blob"] = chew(buf)
                         meta["streams"][pid]["unknown"] = True
 
                 meta["streams"][pid]["samples"][index] = sample

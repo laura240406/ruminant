@@ -193,6 +193,24 @@ class FFMpreg(object):
         0x1e: "RESERVED",
         0x1f: "RESERVED",
     }
+    TELETEXT_TABLE = bytes.fromhex(
+        "00004040202060601010505030307070"
+        + "08084848282868681818585838387878"
+        + "04044444242464641414545434347474"
+        + "0c0c4c4c2c2c6c6c1c1c5c5c3c3c7c7c"
+        + "02024242222262621212525232327272"
+        + "0a0a4a4a2a2a6a6a1a1a5a5a3a3a7a7a"
+        + "06064646262666661616565636367676"
+        + "0e0e4e4e2e2e6e6e1e1e5e5e3e3e7e7e"
+        + "01014141212161611111515131317171"
+        + "09094949292969691919595939397979"
+        + "05054545252565651515555535357575"
+        + "0d0d4d4d2d2d6d6d1d1d5d5d3d3d7d7d"
+        + "03034343232363631313535333337373"
+        + "0b0b4b4b2b2b6b6b1b1b5b5b3b3b7b7b"
+        + "07074747272767671717575737377777"
+        + "0f0f4f4f2f2f6f6f1f1f5f5f3f3f7f7f"
+    )
     # BOOK New FFMpreg constant
 
     @staticmethod
@@ -2649,5 +2667,75 @@ class FFMpreg(object):
                 pairs.append((offsets[i], offsets[i + 1] - offsets[i]))
 
         return pairs
+
+    @staticmethod
+    def decode_hamming_8_4(byte: int) -> int:
+        d1 = (byte >> 0) & 1
+        p1 = (byte >> 1) & 1
+        d2 = (byte >> 2) & 1
+        p2 = (byte >> 3) & 1
+        d3 = (byte >> 4) & 1
+        p3 = (byte >> 5) & 1
+        d4 = (byte >> 6) & 1
+
+        s1 = d1 ^ d3 ^ d4 ^ p1 ^ 1
+        s2 = d1 ^ d2 ^ d4 ^ p2 ^ 1
+        s3 = d1 ^ d2 ^ d3 ^ p3 ^ 1
+
+        syndrome = (s3 << 2) | (s2 << 1) | s1
+
+        if syndrome == 0b110:
+            d2 ^= 1
+        elif syndrome == 0b101:
+            d3 ^= 1
+        elif syndrome == 0b011:
+            d4 ^= 1
+        elif syndrome == 0b111:
+            d1 ^= 1
+
+        return d1 | (d2 << 1) | (d3 << 2) | (d4 << 3)
+
+    @staticmethod
+    def read_teletext_packet(buf: Buf) -> dict:
+        """Read a Teletext packet"""
+        packet: dict = {}
+
+        typ = buf.ru8()
+
+        if typ >= 0x80 and typ <= 0xfe:
+            packet["type"] = "User Defined"
+        else:
+            packet["type"] = utils.unraw(
+                typ, 1, {0x02: "Teletext non-subtitle", 0x03: "Teletext subtitle", 0xff: "Stuffing"}, True
+            )
+
+        packet["length"] = buf.ru8()
+        buf.pasunit(packet["length"])
+
+        if packet["type"] == "User Defined":
+            packet["payload"] = buf.rh(buf.unit)
+        elif packet["type"] in ("Teletext non-subtitle", "Teletext subtitle"):
+            packet["reserved"] = buf.rb(2)
+            packet["parity"] = buf.rb(1)
+            packet["line-offset"] = buf.rb(5)
+            packet["framing-code"] = buf.ru8()
+
+            nibble1 = FFMpreg.decode_hamming_8_4(buf.ru8())
+            nibble2 = FFMpreg.decode_hamming_8_4(buf.ru8())
+            mag_raw = nibble1 & 0x07
+            r1 = (nibble1 >> 3) & 0x01
+            r2_5 = nibble2 & 0x0f
+            packet["magazine"] = 8 if mag_raw == 0 else mag_raw
+            packet["row"] = (r2_5 << 1) | r1
+
+            packet["line"] = b""
+            while buf.hasunit():
+                packet["line"] += bytes([FFMpreg.TELETEXT_TABLE[buf.ru8()]])
+
+            packet["line"] = packet["line"].decode("latin-1")
+
+        buf.sapunit()
+
+        return packet
 
     # BOOK New FFMpreg method
