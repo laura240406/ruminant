@@ -2611,4 +2611,29 @@ class FFMpreg(object):
 
         return frame
 
+    @staticmethod
+    def find_start_codes(buf: Buf) -> list[tuple[int, int]]:
+        bak = buf.backup()
+        if buf.unit is None:
+            buf.setunit(buf.available())
+
+        offsets: list[int] = []
+        while buf.hasunit(3):
+            if buf.peek(3) == b"\x00\x00\x01":
+                offsets.append(buf.tell())
+                buf.skip(3)
+            else:
+                buf.skip(1)
+
+        offsets.append(buf.tell())
+
+        buf.restore(bak)
+
+        pairs: list[tuple[int, int]] = []
+        if len(offsets) > 1:
+            for i in range(0, len(offsets) - 1):
+                pairs.append((offsets[i], offsets[i + 1] - offsets[i]))
+
+        return pairs
+
     # BOOK New FFMpreg method
