@@ -2562,19 +2562,19 @@ class FFMpreg(object):
                         frame["frame-rate-extension-n"] = buf.rb(2)
                         frame["frame-rate-extension-d"] = buf.rb(5)
                     case "Picture Coding":
-                        frame["f_code"] = bin(buf.rb(16))[2:].zfill(16)
-                        frame["intra_dc_precision"] = buf.rb(2) + 8
-                        frame["picture_structure"] = buf.rb(2)
-                        frame["top_field_first"] = buf.rb(1)
-                        frame["frame_pred_frame_dct"] = buf.rb(1)
-                        frame["concealment_motion_vectors"] = buf.rb(1)
-                        frame["q_scale_type"] = buf.rb(1)
-                        frame["intra_vlc_format"] = buf.rb(1)
-                        frame["alternate_scan"] = buf.rb(1)
-                        frame["repeat_first_field"] = buf.rb(1)
-                        frame["chroma_420_type"] = buf.rb(1)
-                        frame["progressive_frame"] = buf.rb(1)
-                        frame["composite_display_flag"] = buf.rb(1)
+                        frame["f-code"] = bin(buf.rb(16))[2:].zfill(16)
+                        frame["intra-dc-precision"] = buf.rb(2) + 8
+                        frame["picture-structure"] = buf.rb(2)
+                        frame["top-field-first"] = buf.rb(1)
+                        frame["frame-pred-frame-dct"] = buf.rb(1)
+                        frame["concealment-motion-vectors"] = buf.rb(1)
+                        frame["q-scale-type"] = buf.rb(1)
+                        frame["intra-vlc-format"] = buf.rb(1)
+                        frame["alternate-scan"] = buf.rb(1)
+                        frame["repeat-first-field"] = buf.rb(1)
+                        frame["chroma-420-type"] = buf.rb(1)
+                        frame["progressive-frame"] = buf.rb(1)
+                        frame["composite-display-flag"] = buf.rb(1)
                         buf._bits = 0
                         frame["rest"] = buf.rh(buf.unit)
                     case _:
@@ -2589,8 +2589,8 @@ class FFMpreg(object):
                 frame["closed-gop"] = buf.rb(1)
                 frame["broken-link"] = buf.rb(1)
             case "Picture Start":
-                frame["temporal_reference"] = buf.rb(10)
-                frame["picture_coding_type"] = utils.unraw(
+                frame["temporal-reference"] = buf.rb(10)
+                frame["picture-coding-type"] = utils.unraw(
                     buf.rb(3),
                     1,
                     {
@@ -2601,15 +2601,15 @@ class FFMpreg(object):
                     },
                     True,
                 )
-                frame["vbv_delay"] = buf.rb(16)
+                frame["vbv-delay"] = buf.rb(16)
 
-                if frame["picture_coding_type"] in ("Predictive-coded frame", "Bidirectionally predictive-coded frame"):
-                    frame["full_pel_forward_vector"] = buf.rb(1)
-                    frame["forward_f_code"] = buf.rb(3)
+                if frame["picture-coding-type"] in ("Predictive-coded frame", "Bidirectionally predictive-coded frame"):
+                    frame["full-pel-forward-vector"] = buf.rb(1)
+                    frame["forward-f-code"] = buf.rb(3)
 
-                if frame["picture_coding_type"] == "Bidirectionally predictive-coded frame":
-                    frame["full_pel_backward_vector"] = buf.rb(1)
-                    frame["backward_f_code"] = buf.rb(3)
+                if frame["picture-coding-type"] == "Bidirectionally predictive-coded frame":
+                    frame["full-pel-backward-vector"] = buf.rb(1)
+                    frame["backward-f-code"] = buf.rb(3)
 
                 extra = b""
                 while buf.rb(1):
