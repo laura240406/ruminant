@@ -1721,11 +1721,34 @@ class IsoModule(module.RuminantModule):
 
                 # BOOK New MP4 ESDS codec
                 mode = None
+                codec_info = {}
                 for desc in esds["data"]["descriptor"]["value"]["children"]:
                     if desc["tag"] == "DecoderConfigDescriptor":
                         match desc["value"]["object-type-indictation"]:
                             case "Audio ISO/IEC 11172-3":
                                 mode = "mp2/3"
+                            case "Visual ISO/IEC 13818-2 Main Profile":
+                                mode = "mpeg2"
+                            case "Audio ISO/IEC 14496-3 g":
+                                mode = "aac"
+
+                        for child in desc["value"]["children"]:
+                            if child["tag"] == "DecoderSpecificInfo":
+                                codec_info = child["value"]
+
+                match mode:
+                    case "mpeg2":
+                        buf = Buf(bytes.fromhex(codec_info["payload"]))
+                        codec_info["parsed"] = {}
+                        codec_info["parsed"]["packets"] = []
+
+                        for offset, length in FFMpreg.find_start_codes(buf):
+                            buf.seek(offset)
+                            buf.pasunit(length)
+
+                            codec_info["parsed"]["packets"].append(FFMpreg.read_mpeg2_packet(buf))
+
+                            buf.sapunit()
 
                 data["samples"] = {}
 
@@ -1741,6 +1764,16 @@ class IsoModule(module.RuminantModule):
                                         data["samples"][index].append(FFMpreg.read_mp3_frame(self.buf))
                                     else:
                                         data["samples"][index].append(FFMpreg.read_mp2_frame(self.buf))
+                            case "mpeg2":
+                                data["samples"][index] = []
+
+                                for offset, length in FFMpreg.find_start_codes(self.buf):
+                                    self.buf.seek(offset)
+                                    self.buf.pasunit(length)
+
+                                    data["samples"][index].append(FFMpreg.read_mpeg2_packet(self.buf))
+
+                                    self.buf.sapunit()
                             case _:
                                 data["samples"][index] = chew(self.buf, blob_mode=True)
             # BOOK New MP4 handler
@@ -1935,6 +1968,7 @@ class MatroskaModule(module.RuminantModule):
         0x00000098: ("ChapterFlagHidden", "uint"),
         0x0000009a: ("FlagInterlaced", "uint"),
         0x0000009c: ("FlagLacing", "uint"),
+        0x0000009d: ("FieldOrder", "uint"),
         0x0000009f: ("Channels", "uint"),
         0x000000a0: ("BlockGroup", "master"),
         0x000000a1: ("Block", "binary"),
@@ -2924,6 +2958,37 @@ class MatroskaModule(module.RuminantModule):
                             stream["samples"][index].append(FFMpreg.read_mp2_frame(self.buf))
 
                         self.buf.sapunit()
+                case "V_MPEG2":
+                    with self.buf:
+                        self.buf.seek(codec_privates[stream["id"]]["data-offset"])
+                        self.buf.pasunit(codec_privates[stream["id"]]["length"])
+
+                        parsed["packets"] = []
+                        for offset, length in FFMpreg.find_start_codes(self.buf):
+                            self.buf.seek(offset)
+                            self.buf.pasunit(length)
+
+                            parsed["packets"].append(FFMpreg.read_mpeg2_packet(self.buf))
+
+                            self.buf.sapunit()
+
+                        codec_privates[stream["id"]]["parsed"] = parsed
+                        self.buf.sapunit()
+
+                    stream["samples"] = {}
+
+                    for index in ranges:
+                        self.buf.seek(sample_offsets[stream["id"]][index])
+                        self.buf.pasunit(sample_sizes[stream["id"]][index])
+
+                        stream["samples"][index] = []
+                        for offset, length in FFMpreg.find_start_codes(self.buf):
+                            self.buf.seek(offset)
+                            self.buf.pasunit(length)
+
+                            stream["samples"][index].append(FFMpreg.read_mpeg2_packet(self.buf))
+
+                            self.buf.sapunit()
                 # BOOK New MKV handler
                 case _:
                     if stream["id"] in codec_privates:
