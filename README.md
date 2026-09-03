@@ -174,22 +174,34 @@ This is a valid complex command: `ruminant -e 2 foo.jpeg - --extract 5 bar.bin -
 
 You can also specify `--extract-all` in order to extract all blobs to the "blobs" directory.
 Specifying a directory as the file makes ruminant walk that directory recursively. Adding `--progress` shows a progress bar (this requires tqdm). Adding `--progress-names` adds file names to the progress bar.
+
 Specifying `--url` makes ruminant treat the file name as a URL and makes it try to fetch the file from it. It uses the user agent of a recent Chrome to not be blocked.
+
 Adding `--strip-url` makes ruminant change some parts of known URLs to preserve metadata. It can, for example, detect that a file is being hosted by Wordpress based on the "/wp-content/" start of the path and can then remove the "-<width>x<height>" part of the file name to preserve its original size and avoid reencoding of the file.
+
 The user agent can be overridden by setting the `RUMINANT_USER_AGENT` environment variable with the desired agent.
+
 Adding `-p <ID> <VALUE>` adds a parameter with a value. This can for example be used to specify decoding ranges or cryptographic keys.
 One example would be to run ruminant on an encrypted ZIP file which contains the following JSON object:
+
 ```"key": {
   "name": "47fafe9b1ce795e5ece32c5e",
   "found": false
 }
 ```
+
 The key can then be specified by adding `-p 47fafe9b1ce795e5ece32c5e foobar` to the command.
+
 Adding `--slim` removes all unnecessary whitespace from the output.
+
 Adding `--shallow` prevents recursive parsing.
+
 Running ruminant on a directory processes all files in the directory. Adding `--filename-regex <REGEX>` makes it only process files that match the regex.
+
 Adding `--print-modules` prints all registered modules and exits.
+
 Adding `--self-test` runs a test suite and exits.
+
 Adding `--version` prints the version and exits.
 
 # Ruminant can't parse xyz
