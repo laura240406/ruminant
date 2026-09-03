@@ -5,8 +5,6 @@ import traceback
 from contextvars import ContextVar
 
 state_stack: ContextVar[dict | None] = ContextVar("state_stack", default=None)
-to_extract: list[int] = []
-extract_all = False
 
 
 class EntryModule(module.RuminantModule):
