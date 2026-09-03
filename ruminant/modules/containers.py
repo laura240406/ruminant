@@ -996,11 +996,11 @@ class ArModule(module.RuminantModule):
         while self.buf.available() >= 58:
             file = {}
             file["name"] = self.buf.rs(16).rstrip(" ")
-            file["modification-time"] = utils.unix_to_date(int("0" + self.buf.rs(12).rstrip(" ")))
-            file["owner-id"] = int("0" + self.buf.rs(6).rstrip(" "))
-            file["group-id"] = int("0" + self.buf.rs(6).rstrip(" "))
-            file["mode"] = self.buf.rs(8).rstrip(" ")
-            file["size"] = int("0" + self.buf.rs(10).rstrip(" "))
+            file["modification-time"] = utils.unix_to_date(int("0" + self.buf.rs(12).strip()))
+            file["owner-id"] = int("0" + self.buf.rs(6).strip())
+            file["group-id"] = int("0" + self.buf.rs(6).strip())
+            file["mode"] = self.buf.rs(8).strip()
+            file["size"] = int("0" + self.buf.rs(10).strip())
             self.buf.skip(2)
 
             if self.buf.tell() % 2 != 0:
