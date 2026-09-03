@@ -1,7 +1,7 @@
 Ruminant is a recursive metadata extraction and file dissection tool.
 
 # What does it do?
-Ruminant takes a file as an input and spits out a huge json object that contains all the metadata it extracted from the file. This is done recursively, e.g. by running ruminant again on each file inside a zip file.
+Ruminant takes a file as an input and spits out a huge json object that contains all the (meta)data it extracted from the file. This is done recursively, e.g. by running ruminant again on each file inside a ZIP file or on the thumbnail inside a JPEG file.
 
 # Why the name?
 To quote Wikipedia: Ruminants are herbivorous grazing or browsing artiodactyls [...]. The process of rechewing the cud to further break down plant matter and stimulate digestion is called rumination. The word "ruminant" comes from the Latin ruminare, which means "to chew over again".
@@ -10,135 +10,150 @@ This tool behaves similarly as extracted blobs themselves can be "chewed over ag
 
 # What can it process?
 Ruminant is still in early alpha but it can already process the following file types:
-* ZIP files
-  * APK signatures
-  * Java jmod modules
-  * encrypted files
-* PDF files
-  * I hate Adobe
-* JPEG files
-  * EXIF metadata
-  * XMP metadata
-  * ICC profiles
-  * IPTC metadata
-  * Adobe-specific metadata in APP14
-  * MPF APP2 segments
-* PNG files
-  * EXIF metadata
-* TIFF files
-  * EXIF metadata (EXIF metadata is literally stored in a TIFF file)
-  * DNG files
-* ISO files
-  * MP4 files
-  * AVIF files
-  * HEIF/HEIC stuff
-  * XMP metadata
-  * AVC1 x264 banners
-  * all of the DRM stuff that Netflix puts in their streams
-    * CENC
-    * PlayReady
-    * Widevine
-  * SEFT metadata
-* ICC profiles
-  * EP0763801A2 extension
-* TrueType fonts
-* RIFF files
-  * WebP
-  * WAV
-* GIF files
-* EBML files
-  * Matroska
-    * WebM
-* Ogg files
-  * Opus metadata
-  * Theora metadata
-  * Vorbis metadata
-* FLAC files
-* DER data
-  * X509 certificates
-  * PEM files
-* GZIP streams
-* BZIP2 streams
-* TAR files
-  * USTAR to be precise
-* PGP stuff
-* ID3v2 tags
-* MPEG-TS
-* MakerNotes
-  * Fuji
-  * Sony
-  * Google HDR+
-* PSD files
-* KDBX files
-* JPEG2000 files
-* C2PA CAI JUMBF metadata
-* WASM files
-* Torrent files
-* Sqlite3 database files
-* DICOM files
-* ASF files
-  * WMA files
-  * WMV files
-* age encrypted files
-  * tlock extensions
-* LUKS headers
-* Java class files
-* ELF files
-  * .comment sections
-  * .interp sections
-  * .note sections
-  * some PS3/PS4 SELF stuff
-* PE files
-  * Authenticode signatures
-  * GRUB modules in EFI files
-* Minecraft NBT files
-  * region files
-* SPIR-V binaries
-* Ar archives
-* Cpio archives
-* Zstd files
+* Android AVB vbmeta partitions
+* Android boot images
+* FLAC
+* ID3v2 (e.g. wrapping MP3 files)
+* MP3
+* MIDI
+* GZip
+* BZip2
+* Zstd
+* Zlib
+* XZ
+* ZIP
+  * embedded Android APK signatures
+  * ZipCrypto encryption, no AES though
+* RIFF
+    * WebP
+    * WAV
+    * AVI
+    * DjVu
+* Tar
+* Ar
+* CPIO
+* HTTP framed streams like MJPEG
+* Java Jmod
+* UF2
+* DVD MPEG sequences
+* Grub 2 modules
+* Android backups
+  * no encryption yet
+* Cab
+* IWA
+* PcapNG
+  * IPv4/IPv6/LLDP/ARP
+  * UDP/TCP/ICMP/IGMP/ICMPv6
+  * DNS
+      * A/OPT/SOA/AAAA/MX/TXT/CAA/DNSKEY/RRSIG/HTTPS/NS/SSHFP/OPENPGPKEY/SRV/DS/NSEC3
+* NCSD (Nintendo 3DS)
+* NCCH (Nintendo 3DS)
+* SMDH (Nintendo 3DS)
+* DARC (Nintendo 3DS)
+* DER (binary)
+* PEM
+* PGP (binary or armored)
+* KeePass KDBX
+  * including AES and ChaCha20 decryption, no Twofish though
+* Age
+* LUKS 1/2
+  * encryption for LUKS2 when used with aes-xts-plain64 and supplied MK
 * SSH signatures
-* Git object files
-* Intel microcode files
-  * including public key detection and signature extraction
-* EXR/OpenEXR files
-* Android vbmeta partitions
-* PDP-11 a.out files
+* EFI signature lists
+* PDF
+* WASM
+* Java classes
+  * including full disassembly
+* ELF
+* PE/EXE/EFI
+* SPIR-V shaders
+* Python bytecode
+  * no disassembly due to unstable nature of bytecode
+* Intel microcode
+  * including signature extraction
+* a.out
+* MBR/GPT partition tables
+* BTRFS send streams
+* TrueType fonts
+* Adobe Photoshop IRB chunks
+* ICC profiles
+* JPEG
+* PNG
+* TIFF
+  * EXIF metadata is just a TIFF file
+* GIF
+* Google HDR+ MakerNotes
+  * I reverse engineered that btw :D
+* PSD (Adobe Photoshop)
+* DICOM
+* OpenEXR
+* ICO
+* Qoi
+* BitTorrent files
+* Sqlite3 databases
+* Minecraft NBT
+* Minecraft MCA chunk regions
+* Git related files (blob, tree, commit)
 * OpenTimestamps proof files
-* xz files
-* UF2 files
-* Android adb backup files
-* Java object serialization data
-* Safetensors files
-* Microsoft cabinet files
-* btrfs stream files
-* Duck IVF video files
-* Apple binary plist files
-  * the text ones are just already supported XML files
-* GGUF files
-* pcapng files
-* OpenStreetMap protobuf files
-* ICO files
-* MP3 files
-  * ID3v1/ID3v1.1 footer
-* 3DS files
-  * NCSD files
-  * NCCH files
-  * SMDH files
-  * DARC files
-* MIDI files
-* binary STL files
-* EFI signature lists (like db or dbx)
-* qoi image files
-* AppleDouble files
-* H.264 JVT NAL sequence files
-* Microsoft DEVMODEW printerSettings1.bin files
-* PYC python bytecode files
+* Java serialization data
+* Safetensors models
+* GGUF models
+* Apple binary property lists
+  * text based ones are just XML
+* OpenStreetMap protobufs
+* STL models
+* AppleDouble
+* Microsoft printer settings
+  * you may find them in XLSX files
 * Mindustry schematics
+* UTF-8 text files
+  * including detection and parsing for base64, JSON and XML
+* Empty files (duh)
+* Zero filled files (also duh)
+* ISOBMFF
+  * MP4/MOV/HEIC/HEIF/AVIF/JPEG2000
+* EBML/Matroska/MKV/WebM
+* Ogg/Ogv
+* MPEG-TS
+* ASF/WMA/WMV
+* Duck IVF
+* Dirac data units
+* JVT-NAL H.264
+
+## Video codecs
+Ruminant can extract and parse data units of specific codecs from specific containers.
+
+### Legend
+❌: not yet supported
+🚧: partially supported
+✅: fully supported (or at least as much as I want it to be)
+empty means the container doesn't support it
+
+|Codec|MP4|MKV|MPEG-TS|Duck IVF|HEIF|
+|-|-|-|-|-|-|
+|MPEG-2|🚧|🚧|🚧|||
+|H.264|✅|✅|✅||✅|
+|H.265|🚧|🚧|🚧||🚧|
+|H.266|🚧|🚧|❌|||
+|AV1|✅|✅||✅|✅|
+|AV2|🚧|🚧||❌|❌|
+|Dirac|✅|✅||||
+|ProRes||✅||||
+|Vorbis|🚧|🚧||||
+|Theora||🚧||||
+|AC-3|✅|✅|✅|||
+|MP2|✅|✅|✅|||
+|MP3|✅|✅|✅|||
+|AAC|❌|✅|❌|||
+|FLAC|🚧|🚧||||
+|Opus|🚧|🚧||||
+|TX3G|✅|||||
+|METT|✅|||||
+|DVBSUB||✅|✅|||
+|Teletext|||✅|||
 
 # How do I install it?
-Run `pip3 install ruminant`.
-Alternatively, you can also run `python3 -m build` in the source tree, followed by `pip3 install dist/*.whl`.
+Run `pip3 install ruminant\[full\]` if you want C acceleration or `pip3 install ruminant` if you want pure Python.
 
 # How do I use it?
 The most basic usage would be `ruminant <file>` in order to process the file and output all metadata.
@@ -159,6 +174,20 @@ Specifying a directory as the file makes ruminant walk that directory recursivel
 Specifying `--url` makes ruminant treat the file name as a URL and makes it try to fetch the file from it. It uses the user agent of a recent Chrome to not be blocked.
 Adding `--strip-url` makes ruminant change some parts of known URLs to preserve metadata. It can, for example, detect that a file is being hosted by Wordpress based on the "/wp-content/" start of the path and can then remove the "-<width>x<height>" part of the file name to preserve its original size and avoid reencoding of the file.
 The user agent can be overridden by setting the `RUMINANT_USER_AGENT` environment variable with the desired agent.
+Adding `-p <ID> <VALUE>` adds a parameter with a value. This can for example be used to specify decoding ranges or cryptographic keys.
+One example would be to run ruminant on an encrypted ZIP file which contains the following JSON object:
+```"key": {
+  "name": "47fafe9b1ce795e5ece32c5e",
+  "found": false
+}
+```
+The key can then be specified by adding `-p 47fafe9b1ce795e5ece32c5e foobar` to the command.
+Adding `--slim` removes all unnecessary whitespace from the output.
+Adding `--shallow` prevents recursive parsing.
+Running ruminant on a directory processes all files in the directory. Adding `--filename-regex <REGEX>` makes it only process files that match the regex.
+Adding `--print-modules` prints all registered modules and exits.
+Adding `--self-test` runs a test suite and exits.
+Adding `--version` prints the version and exits.
 
 # Ruminant can't parse xyz
 Feel free to send me a sample so I can add a parser for it :)
