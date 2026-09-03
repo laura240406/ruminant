@@ -125,8 +125,11 @@ Ruminant can extract and parse data units of specific codecs from specific conta
 
 ### Legend
 ❌: not yet supported
+
 🚧: partially supported
+
 ✅: fully supported (or at least as much as I want it to be)
+
 empty means the container doesn't support it
 
 |Codec|MP4|MKV|MPEG-TS|Duck IVF|HEIF|
