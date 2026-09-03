@@ -184,7 +184,8 @@ The user agent can be overridden by setting the `RUMINANT_USER_AGENT` environmen
 Adding `-p <ID> <VALUE>` adds a parameter with a value. This can for example be used to specify decoding ranges or cryptographic keys.
 One example would be to run ruminant on an encrypted ZIP file which contains the following JSON object:
 
-```"key": {
+```
+"key": {
   "name": "47fafe9b1ce795e5ece32c5e",
   "found": false
 }
