@@ -2989,6 +2989,18 @@ class MatroskaModule(module.RuminantModule):
                             stream["samples"][index].append(FFMpreg.read_mpeg2_packet(self.buf))
 
                             self.buf.sapunit()
+                case "A_MPEG/L3":
+                    stream["samples"] = {}
+
+                    for index in ranges:
+                        self.buf.seek(sample_offsets[stream["id"]][index])
+                        self.buf.pasunit(sample_sizes[stream["id"]][index])
+
+                        stream["samples"][index] = []
+                        while self.buf.hasunit():
+                            stream["samples"][index].append(FFMpreg.read_mp3_frame(self.buf))
+
+                        self.buf.sapunit()
                 # BOOK New MKV handler
                 case _:
                     if stream["id"] in codec_privates:
