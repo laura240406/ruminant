@@ -147,7 +147,7 @@ empty means the container doesn't support it
 |AC-3|✅|✅|✅|||
 |MP2|✅|✅|✅|||
 |MP3|✅|✅|✅|||
-|AAC|❌|✅|❌|||
+|AAC|❌|❌|✅|||
 |FLAC|🚧|🚧||||
 |Opus|🚧|🚧||||
 |TX3G|✅|||||
