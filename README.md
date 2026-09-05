@@ -140,7 +140,7 @@ empty means the container doesn't support it
 |H.266|🚧|🚧|❌|||
 |AV1|✅|✅||✅|✅|
 |AV2|🚧|🚧||✅|❌|
-|Dirac|✅|✅||||
+|Dirac|✅|✅|✅|||
 |ProRes||✅||||
 |Vorbis|🚧|🚧||||
 |Theora||🚧||||
