@@ -139,7 +139,7 @@ empty means the container doesn't support it
 |H.265|🚧|🚧|🚧||🚧|
 |H.266|🚧|🚧|❌|||
 |AV1|✅|✅||✅|✅|
-|AV2|🚧|🚧||✅|❌|
+|AV2|🚧|🚧||🚧|❌|
 |Dirac|✅|✅|✅|||
 |ProRes||✅||||
 |Vorbis|🚧|🚧||||
