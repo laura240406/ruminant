@@ -3622,12 +3622,11 @@ class MpegTsModule(module.RuminantModule):
             meta["streams"][pid]["samples"] = {}
             for index in ranges:
                 sample: dict = {}
+                buf = Buf(ess[index]["blob"][ess[index]["header"]["length"] :])
 
                 # BOOK New MPEG-TS handler
                 match self.es[pid][0]:
                     case 27:
-                        buf = Buf(ess[index]["blob"][ess[index]["header"]["length"] :])
-
                         sample["nalus"] = []
                         for offset, length in FFMpreg.find_start_codes(buf):
                             buf.seek(offset)
@@ -3637,8 +3636,6 @@ class MpegTsModule(module.RuminantModule):
 
                             buf.sapunit()
                     case 6:
-                        buf = Buf(ess[index]["blob"][ess[index]["header"]["length"] :])
-
                         mode = None
                         for desc in self.es[pid][1]["descriptors"]:
                             match desc.get("type"):
@@ -3676,20 +3673,14 @@ class MpegTsModule(module.RuminantModule):
                                 sample["blob"] = chew(ess[index]["blob"])
                                 meta["streams"][pid]["unknown"] = True
                     case 3:
-                        buf = Buf(ess[index]["blob"][ess[index]["header"]["length"] :])
-
                         sample["frames"] = []
                         while buf.hasunit():
                             sample["frames"].append(FFMpreg.read_mp2_frame(buf))
                     case 4:
-                        buf = Buf(ess[index]["blob"][ess[index]["header"]["length"] :])
-
                         sample["frames"] = []
                         while buf.hasunit():
                             sample["frames"].append(FFMpreg.read_mp3_frame(buf))
                     case 36:
-                        buf = Buf(ess[index]["blob"][ess[index]["header"]["length"] :])
-
                         sample["nalus"] = []
                         for offset, length in FFMpreg.find_start_codes(buf):
                             buf.seek(offset)
@@ -3699,16 +3690,12 @@ class MpegTsModule(module.RuminantModule):
 
                             buf.sapunit()
                     case 15:
-                        buf = Buf(ess[index]["blob"][ess[index]["header"]["length"] :])
-
                         sample["frames"] = []
                         while buf.hasunit():
                             sample["frames"].append(FFMpreg.read_aac_frame(buf))
                     case 21:
                         sample["tag"] = chew(Buf(ess[index]["blob"][ess[index]["header"]["length"] :]))
                     case 2:
-                        buf = Buf(ess[index]["blob"][ess[index]["header"]["length"] :])
-
                         sample["packets"] = []
                         for offset, length in FFMpreg.find_start_codes(buf):
                             buf.seek(offset)
@@ -3718,14 +3705,10 @@ class MpegTsModule(module.RuminantModule):
 
                             buf.sapunit()
                     case 209:
-                        buf = Buf(ess[index]["blob"][ess[index]["header"]["length"] :])
-
                         sample["packets"] = []
                         while buf.hasunit():
                             sample["packets"].append(FFMpreg.read_dirac_packet(buf))
                     case 51:
-                        buf = Buf(ess[index]["blob"][ess[index]["header"]["length"] :])
-
                         sample["nalus"] = []
                         for offset, length in FFMpreg.find_start_codes(buf):
                             buf.seek(offset)
@@ -3735,8 +3718,6 @@ class MpegTsModule(module.RuminantModule):
 
                             buf.sapunit()
                     case _:
-                        buf = Buf(ess[index]["blob"][ess[index]["header"]["length"] :])
-
                         sample["blob"] = chew(buf)
                         meta["streams"][pid]["unknown"] = True
 
