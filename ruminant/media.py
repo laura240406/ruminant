@@ -2738,4 +2738,290 @@ class FFMpreg(object):
 
         return packet
 
+    @staticmethod
+    def read_dirac_packet(buf: Buf) -> dict:
+        packet: dict = {}
+        buf.skip(4)
+
+        typ = buf.ru8()
+
+        if typ & 0b00001000:
+            packet["type"] = "picture"
+            packet["frame-flags"] = {
+                "picture-syntax": ["dirac", "vc-2"][typ >> 7],
+                "arithmetic-coding": bool(typ & 0x40),
+                "reserved": (typ >> 5) & 0x01,
+                "variant-profile-flag": bool(typ & 0x10),
+                "picture-flag": bool(typ & 0x08),
+                "num-refs": typ & 0x07,
+            }
+        else:
+            packet["type"] = utils.unraw(
+                typ,
+                1,
+                {
+                    0x00: "sequence-header",
+                    0x20: "auxiliary-data",
+                    0x10: "end-of-sequence",
+                },
+                True,
+            )
+
+        packet["next-offset"] = buf.ru32()
+        packet["previous-offset"] = buf.ru32()
+
+        packet["data"] = {}
+        if packet["next-offset"] != 13:
+            buf.pasunit(packet["next-offset"] - 13)
+
+            match packet["type"]:
+                case "picture":
+                    packet["data"]["frame-counter"] = buf.ru32()
+                case "auxiliary-data":
+                    packet["data"]["string"] = buf.rs(buf.unit)
+                case "sequence-header":
+                    packet["data"]["parse-paramets"] = {}
+                    packet["data"]["parse-paramets"]["major-version"] = buf.riue()
+                    packet["data"]["parse-paramets"]["minor-version"] = buf.riue()
+                    packet["data"]["parse-paramets"]["profile"] = buf.riue()
+                    packet["data"]["parse-paramets"]["level"] = buf.riue()
+
+                    packet["data"]["base-video-format"] = utils.unraw(
+                        buf.riue(),
+                        1,
+                        {
+                            0x00: "Custom Format",
+                            0x01: "QSIF525",
+                            0x02: "QCIF",
+                            0x03: "SIF525",
+                            0x04: "CIF",
+                            0x05: "4SIF525",
+                            0x06: "4CIF",
+                            0x07: "SD 480I-60 (525 Line 59.94 Field/s Standard Definition)",
+                            0x08: "SD 576I-50 (625 Line 50 Field/s Standard Definition)",
+                            0x09: "HD 720P-60 (720 Line 59.94 Frame/s High Definition)",
+                            0x0a: "HD 720P-50 (720 Line 50 Frame/s High Definition)",
+                            0x0b: "HD 1080I-60 (1080 Line 60 Field/s High Definition)",
+                            0x0c: "HD 1080I-50 (1080 Line 50 Field/s High Definition)",
+                            0x0d: "HD 1080P-60 (1080 Line 59.94 Frame/s High Definition)",
+                            0x0e: "HD 1080P50 (1080 Line 50 Frame/s High Definition)",
+                            0x0f: "DC 2K-24 (2K D-Cinema, 24fps)",
+                            0x10: "DC 4K-24 (4K D-Cinema, 24fps)",
+                            0x11: "UHDTV 4K-60 (2160-line 59.94 Frame/s UHDTV)",
+                            0x12: "UHDTV 4K-50 (2160-line 50 Frame/s UHDTV)",
+                            0x13: "UHDTV 8K-60 (4320-line 59.94 Frame/s UHDTV)",
+                            0x14: "UHDTV 8K-50 (4320-line 50 Frame/s UHDTV)",
+                        },
+                        True,
+                    )
+
+                    packet["data"]["source-parameters"] = {}
+                    packet["data"]["source-parameters"]["custom-dimensions"] = buf.rb(1)
+                    if packet["data"]["source-parameters"]["custom-dimensions"]:
+                        packet["data"]["source-parameters"]["frame-width"] = buf.riue()
+                        packet["data"]["source-parameters"]["frame-height"] = buf.riue()
+                    packet["data"]["source-parameters"]["custom-chroma-sampling"] = buf.rb(1)
+                    if packet["data"]["source-parameters"]["custom-chroma-sampling"]:
+                        packet["data"]["source-parameters"]["chroma-format"] = utils.unraw(
+                            buf.riue(),
+                            1,
+                            {0x00: "4:4:4", 0x01: "4:2:2", 0x02: "4:2:0"},
+                            True,
+                        )
+                    packet["data"]["source-parameters"]["custom-scan-format"] = buf.rb(1)
+                    if packet["data"]["source-parameters"]["custom-scan-format"]:
+                        packet["data"]["source-parameters"]["scan-format"] = utils.unraw(
+                            buf.riue(),
+                            1,
+                            {0x00: "progressive", 0x01: "interlaced"},
+                            True,
+                        )
+                    packet["data"]["source-parameters"]["custom-frame-rate"] = buf.rb(1)
+                    if packet["data"]["source-parameters"]["custom-frame-rate"]:
+                        packet["data"]["source-parameters"]["frame-rate-index"] = buf.riue()
+                        if packet["data"]["source-parameters"]["frame-rate-index"] == 0:
+                            packet["data"]["source-parameters"]["frame-rate-num"] = buf.riue()
+                            packet["data"]["source-parameters"]["frame-rate-denom"] = buf.riue()
+                        else:
+                            (
+                                packet["data"]["source-parameters"]["frame-rate-num"],
+                                packet["data"]["source-parameters"]["frame-rate-denom"],
+                            ) = {
+                                0x01: (24000, 1001),
+                                0x02: (24, 1),
+                                0x03: (25, 1),
+                                0x04: (30000, 1001),
+                                0x05: (30, 1),
+                                0x06: (50, 1),
+                                0x07: (60000, 1001),
+                                0x08: (60, 1),
+                                0x09: (15000, 1001),
+                                0x0a: (25, 2),
+                            }.get(
+                                packet["data"]["source-parameters"]["frame-rate-index"],
+                                (0, 1),
+                            )
+                        packet["data"]["source-parameters"]["frame-rate"] = (
+                            packet["data"]["source-parameters"]["frame-rate-num"]
+                            / packet["data"]["source-parameters"]["frame-rate-denom"]
+                        )
+
+                    packet["data"]["source-parameters"]["custom-pixel-aspect-ratio"] = buf.rb(1)
+                    if packet["data"]["source-parameters"]["custom-pixel-aspect-ratio"]:
+                        packet["data"]["source-parameters"]["pixel-aspect-ratio-index"] = buf.riue()
+                        if packet["data"]["source-parameters"]["pixel-aspect-ratio-index"] == 0:
+                            packet["data"]["source-parameters"]["pixel-aspect-ratio-num"] = buf.riue()
+                            packet["data"]["source-parameters"]["pixel-aspect-ratio-denom"] = buf.riue()
+                        else:
+                            (
+                                packet["data"]["source-parameters"]["pixel-aspect-ratio-num"],
+                                packet["data"]["source-parameters"]["pixel-aspect-ratio-denom"],
+                            ) = {
+                                0x01: (1, 1),
+                                0x02: (10, 11),
+                                0x03: (12, 11),
+                                0x04: (40, 33),
+                                0x05: (16, 11),
+                                0x06: (4, 3),
+                            }.get(
+                                packet["data"]["source-parameters"]["pixel-aspect-ratio-index"],
+                                (0, 1),
+                            )
+
+                    packet["data"]["source-parameters"]["custom-clean-area"] = buf.rb(1)
+                    if packet["data"]["source-parameters"]["custom-clean-area"]:
+                        packet["data"]["source-parameters"]["clean-area-width"] = buf.riue()
+                        packet["data"]["source-parameters"]["clean-area-height"] = buf.riue()
+                        packet["data"]["source-parameters"]["clean-area-left-offset"] = buf.riue()
+                        packet["data"]["source-parameters"]["clean-area-top-offset"] = buf.riue()
+
+                    packet["data"]["source-parameters"]["custom-signal"] = buf.rb(1)
+                    if packet["data"]["source-parameters"]["custom-signal"]:
+                        packet["data"]["source-parameters"]["signal-index"] = buf.riue()
+
+                        if packet["data"]["source-parameters"]["signal-index"] == 0:
+                            packet["data"]["source-parameters"]["signal-luma-offset"] = buf.riue()
+                            packet["data"]["source-parameters"]["signal-luma-excursion"] = buf.riue()
+                            packet["data"]["source-parameters"]["signal-chroma-offset"] = buf.riue()
+                            packet["data"]["source-parameters"]["signal-chroma-excursion"] = buf.riue()
+                        else:
+                            packet["data"]["source-parameters"]["signal-luma-offset"] = {
+                                0x01: 0,
+                                0x02: 16,
+                                0x03: 64,
+                                0x04: 256,
+                            }.get(packet["data"]["source-parameters"]["signal-index"], 0)
+                            packet["data"]["source-parameters"]["signal-luma-excursion"] = {
+                                0x01: 255,
+                                0x02: 219,
+                                0x03: 876,
+                                0x04: 3504,
+                            }.get(packet["data"]["source-parameters"]["signal-index"], 0)
+                            packet["data"]["source-parameters"]["signal-chroma-offset"] = {
+                                0x01: 128,
+                                0x02: 128,
+                                0x03: 512,
+                                0x04: 2048,
+                            }.get(packet["data"]["source-parameters"]["signal-index"], 0)
+                            packet["data"]["source-parameters"]["signal-chroma-excursion"] = {
+                                0x01: 255,
+                                0x02: 224,
+                                0x03: 896,
+                                0x04: 3584,
+                            }.get(packet["data"]["source-parameters"]["signal-index"], 0)
+
+                    # eww br*t*sh
+                    packet["data"]["source-parameters"]["custom-colour-spec"] = buf.rb(1)
+                    if packet["data"]["source-parameters"]["custom-colour-spec"]:
+                        packet["data"]["source-parameters"]["colour-spec-index"] = buf.riue()
+                        packet["data"]["source-parameters"]["colour-spec-primaries"] = utils.unraw(
+                            packet["data"]["source-parameters"]["colour-spec-index"],
+                            1,
+                            {
+                                0x00: "HDTV",
+                                0x01: "SDTV 525",
+                                0x02: "SDTV 625",
+                                0x03: "HDTV",
+                                0x04: "HDTV",
+                            },
+                            True,
+                        )
+                        packet["data"]["source-parameters"]["colour-spec-matrix"] = utils.unraw(
+                            packet["data"]["source-parameters"]["colour-spec-index"],
+                            1,
+                            {
+                                0x00: "HDTV",
+                                0x01: "SDTV",
+                                0x02: "SDTV",
+                                0x03: "HDTV",
+                                0x04: "HDTV",
+                            },
+                            True,
+                        )
+                        packet["data"]["source-parameters"]["colour-spec-transfer-function"] = utils.unraw(
+                            packet["data"]["source-parameters"]["colour-spec-index"],
+                            1,
+                            {
+                                0x00: "TV gamma",
+                                0x01: "TV gamma",
+                                0x02: "TV gamma",
+                                0x03: "TV gamma",
+                                0x04: "DCinema gamma",
+                            },
+                            True,
+                        )
+
+                        if packet["data"]["source-parameters"]["colour-spec-index"] == 0:
+                            packet["data"]["source-parameters"]["custom-colour-spec-primaries"] = buf.rb(1)
+                            if packet["data"]["source-parameters"]["custom-colour-spec-primaries"]:
+                                packet["data"]["source-parameters"]["colour-spec-primaries-index"] = buf.riue()
+                                packet["data"]["source-parameters"]["colour-spec-primaries"] = utils.unraw(
+                                    packet["data"]["source-parameters"]["colour-spec-primaries-index"],
+                                    1,
+                                    {
+                                        0x00: "HDTV",
+                                        0x01: "SDTV 525",
+                                        0x02: "SDTV 625",
+                                        0x03: "DCinema",
+                                    },
+                                    True,
+                                )
+
+                        if packet["data"]["source-parameters"]["colour-spec-index"] == 0:
+                            packet["data"]["source-parameters"]["custom-colour-spec-matrix"] = buf.rb(1)
+                            if packet["data"]["source-parameters"]["custom-colour-spec-matrix"]:
+                                packet["data"]["source-parameters"]["colour-spec-matrix-index"] = buf.riue()
+                                packet["data"]["source-parameters"]["colour-spec-matrix"] = utils.unraw(
+                                    packet["data"]["source-parameters"]["colour-spec-matrix-index"],
+                                    1,
+                                    {
+                                        0x00: "HDTV",
+                                        0x01: "SDTV",
+                                        0x02: "Reversible",
+                                    },
+                                    True,
+                                )
+
+                        if packet["data"]["source-parameters"]["colour-spec-index"] == 0:
+                            packet["data"]["source-parameters"]["custom-colour-spec-transfer-function"] = buf.rb(1)
+                            if packet["data"]["source-parameters"]["custom-colour-spec-transfer-function"]:
+                                packet["data"]["source-parameters"]["colour-spec-transfer-function-index"] = buf.riue()
+                                packet["data"]["source-parameters"]["colour-spec-transfer-function"] = utils.unraw(
+                                    packet["data"]["source-parameters"]["colour-spec-transfer-function-index"],
+                                    1,
+                                    {
+                                        0x00: "TV gamma",
+                                        0x01: "Extended Gamut",
+                                        0x02: "Linear",
+                                        0x03: "DCI Gamma",
+                                    },
+                                    True,
+                                )
+
+                    buf.align()
+
+            buf.sapunit()
+
+        return packet
+
     # BOOK New FFMpreg method
