@@ -3413,6 +3413,7 @@ class MpegTsModule(module.RuminantModule):
                                 21: "ID3 metadata",
                                 27: "H.264 video",
                                 36: "H.265 video",
+                                51: "H.266 video",
                                 209: "Dirac video",
                             },
                             True,
@@ -3722,6 +3723,17 @@ class MpegTsModule(module.RuminantModule):
                         sample["packets"] = []
                         while buf.hasunit():
                             sample["packets"].append(FFMpreg.read_dirac_packet(buf))
+                    case 51:
+                        buf = Buf(ess[index]["blob"][ess[index]["header"]["length"] :])
+
+                        sample["nalus"] = []
+                        for offset, length in FFMpreg.find_start_codes(buf):
+                            buf.seek(offset)
+                            buf.pasunit(length)
+
+                            sample["nalus"].append(FFMpreg.read_h266_nalu(buf))
+
+                            buf.sapunit()
                     case _:
                         buf = Buf(ess[index]["blob"][ess[index]["header"]["length"] :])
 
