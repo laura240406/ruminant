@@ -1334,6 +1334,10 @@ class IsoModule(module.RuminantModule):
         elif typ == "mett":
             atom["data"]["content-encoding"] = self.buf.rzs()
             atom["data"]["mime-format"] = self.buf.rzs()
+        elif typ == "auxC":
+            self.read_version(atom)
+            atom["data"]["aux-type"] = self.buf.rzs()
+            atom["data"]["payload"] = self.buf.rh(self.buf.unit)
         elif typ[0] == "©" or typ in ("iods", "SDLN", "smrd"):
             if typ[:2] == "©T" and self.buf.pu16() == self.buf.unit - 4:
                 length = self.buf.ru16()
