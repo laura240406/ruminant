@@ -3208,6 +3208,11 @@ class MpegTsModule(module.RuminantModule):
         else:
             return buf.peek(1) == b"\x47" and (buf.peek(189)[-1] == 0x47 or buf.peek(205)[-1] == 0x47)
 
+    def decode_ts(self, b: bytes) -> int:
+        return (
+            ((b[0] & 0x0e) << 29) | ((b[1] & 0xff) << 22) | ((b[2] & 0xfe) << 14) | ((b[3] & 0xff) << 7) | ((b[4] & 0xfe) >> 1)
+        )
+
     def read_descriptors(self, buf):
         descs = []
 
@@ -3515,7 +3520,6 @@ class MpegTsModule(module.RuminantModule):
                             buf.skip(3)
                             chunk["header"] = {}
 
-                            chunk["header"] = {}
                             chunk["header"]["steam-id"] = utils.unraw(
                                 buf.ru8(),
                                 1,
@@ -3597,10 +3601,10 @@ class MpegTsModule(module.RuminantModule):
                             chunk["header"]["optional"] = {}
 
                             if chunk["header"]["flags"]["pts-present"]:
-                                chunk["header"]["optional"]["pts"] = int.from_bytes(buf.read(5), "big")
+                                chunk["header"]["optional"]["pts"] = self.decode_ts(buf.read(5))
 
                             if chunk["header"]["flags"]["dts-present"]:
-                                chunk["header"]["optional"]["dts"] = int.from_bytes(buf.read(5), "big")
+                                chunk["header"]["optional"]["dts"] = self.decode_ts(buf.read(5))
 
                             if buf.unit:
                                 chunk["header"]["optional"]["rest"] = buf.rh(buf.unit)
