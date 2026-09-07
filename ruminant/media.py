@@ -2652,8 +2652,8 @@ class FFMpreg(object):
         offsets: list[int] = []
         while buf.hasunit(3):
             if buf.peek(3) == b"\x00\x00\x01":
-                offsets.append(buf.tell())
                 buf.skip(3)
+                offsets.append(buf.tell())
             else:
                 buf.skip(1)
 

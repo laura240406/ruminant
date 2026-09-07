@@ -3243,7 +3243,7 @@ class MpegTsModule(module.RuminantModule):
                     )
                 case 0x25 | 0x26:
                     if buf.peek(2) == b"\xff\xff":
-                        desc["type"] = "Twitch ID3"
+                        desc["type"] = "ID3"
                     else:
                         desc["payload"] = buf.rh(buf.unit)
                         desc["unknown"] = True
@@ -3722,7 +3722,7 @@ class MpegTsModule(module.RuminantModule):
 
                             buf.sapunit()
                     case _:
-                        sample["blob"] = chew(buf)
+                        sample["blob"] = chew(buf, blob_mode=True)
                         meta["streams"][pid]["unknown"] = True
 
                 meta["streams"][pid]["samples"][index] = sample
