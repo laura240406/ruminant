@@ -59,7 +59,7 @@ class Utf8Module(module.RuminantModule):
                         blob = None
                         for i in range(0, 4):
                             try:
-                                blob = chew(base64.b64decode(content + "=" * i, validate=True))
+                                blob = chew(base64.b64decode(content.replace("\n", "") + "=" * i, validate=True))
                                 break
                             except binascii.Error:
                                 pass

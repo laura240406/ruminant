@@ -2070,10 +2070,6 @@ class MindustrySchematicModule(module.RuminantModule):
             name = buf.rs(buf.ru16())
             meta["tags"][name] = buf.rs(buf.ru16())
 
-            match name:
-                case "contentMap" | "labels":
-                    meta["tags"][name] = json.loads(meta["tags"][name])
-
         meta["blocks"] = []
         for i in range(0, buf.ru8()):
             meta["blocks"].append(buf.rs(buf.ru16()))
