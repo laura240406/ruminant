@@ -623,3 +623,49 @@ class Woff2Module(module.RuminantModule):
         self.buf.sapunit()
 
         return meta
+
+
+@module.register
+class Grub2FontModule(module.RuminantModule):
+    desc = "GRUB2 font files."
+
+    @staticmethod
+    def identify(buf: Buf, ctx={}) -> bool:
+        return buf.peek(12) == b"FILE\x00\x00\x00\x04PFF2"
+
+    def chew(self) -> ruminant_types.JSON:
+        meta: dict = {}
+        meta["type"] = "grub2-font"
+
+        meta["entries"] = []
+        while self.buf.available() >= 8:
+            entry = {}
+            entry["type"] = self.buf.rs(4)
+            entry["length"] = self.buf.ru32()
+
+            if entry["length"] == 0xffffffff:
+                entry["length"] = self.buf.available()
+
+            self.buf.pasunit(entry["length"])
+
+            match entry["type"]:
+                case "FILE":
+                    entry["type"] = self.buf.rs(self.buf.unit)
+                case "NAME" | "FAMI" | "WEIG" | "SLAN":
+                    entry["string"] = self.buf.rs(self.buf.unit)
+                case "PTSZ" | "MAXW" | "MAXH" | "ASCE" | "DESC":
+                    entry["value"] = self.buf.ri16()
+                case "CHIX" | "DATA":
+                    with self.buf.subunit():
+                        entry["payload"] = chew(self.buf, blob_mode=True)
+                case _:
+                    with self.buf.subunit():
+                        entry["payload"] = chew(self.buf)
+
+                    entry["unknown"] = True
+
+            self.buf.sapunit()
+
+            meta["entries"].append(entry)
+
+        return meta
