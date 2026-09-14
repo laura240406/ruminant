@@ -4509,29 +4509,20 @@ class JvtNalH264Module(module.RuminantModule):
         meta: dict = {}
         meta["type"] = "jvt-nal-h264"
 
-        starts = []
-        while self.buf.available() > 4:
-            if self.buf.peek(4) == b"\x00\x00\x00\x01":
-                starts.append(self.buf.tell())
-                self.buf.skip(4)
-            else:
-                self.buf.skip(1)
-
-        starts.append(self.buf.tell())
-
+        starts = FFMpreg.find_start_codes(self.buf)
         ranges: list[int] = utils.expand_ranges(secrets.get_parameter("0", meta, "ranges"), 0, len(starts) - 2)
 
         meta["nals"] = []
         for i in ranges:
-            self.buf.seek(starts[i] + 4)
-            self.buf.pasunit(starts[i + 1] - starts[i] - 4)
+            self.buf.seek(starts[i][0])
+            self.buf.pasunit(starts[i][1])
 
             meta["nals"].append(FFMpreg.read_h264_nalu(self.buf, slim=True))
 
             self.buf.popunit()
 
-        self.buf.seek(starts[-2] + 4)
-        self.buf.pasunit(starts[-1] - starts[-2] - 4)
+        self.buf.seek(starts[-1][0])
+        self.buf.pasunit(starts[-1][1])
 
         FFMpreg.read_h264_nalu(self.buf, slim=True)
 
