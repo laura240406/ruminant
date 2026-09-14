@@ -1250,8 +1250,8 @@ class IsoModule(module.RuminantModule):
 
                 if atom["data"]["sublayers-count"] > 1:
                     temp = self.buf.rb(atom["data"]["sublayers-count"] - 1)
-                    self.buf.align()
                     atom["data"]["ptl-sublayer-level-present-flag"] = self.buf.rb(atom["data"]["sublayers-count"] - 1)
+                    self.buf.align()
                     atom["data"]["sublayer-level-idc"] = self.buf.rh(temp.bit_count())
 
                 atom["data"]["ptl-sub-profile-count"] = self.buf.ru8()
