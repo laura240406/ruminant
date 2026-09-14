@@ -138,7 +138,7 @@ empty means the container doesn't support it
 |MPEG-2|🚧|🚧|🚧|||
 |H.264|✅|✅|✅||✅|
 |H.265|🚧|🚧|🚧||🚧|
-|H.266|🚧|🚧|🚧|||
+|H.266|🚧|🚧|🚧||🚧|
 |AV1|✅|✅||✅|✅|
 |AV2|🚧|🚧||🚧|❌|
 |Dirac|✅|✅|✅|||
