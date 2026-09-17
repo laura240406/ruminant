@@ -1,4 +1,4 @@
-from . import modules, module, constants, utils
+from . import modules, module, constants, utils, ruminant_profile
 from .buf import Buf
 import argparse
 import sys
@@ -200,7 +200,11 @@ def process(file, walk):
         )
 
 
-def main(dev=False):
+def main(*args, **kwargs):
+    return ruminant_profile.wrap_main(_main)(*args, **kwargs)
+
+
+def _main(dev=False):
     global has_tqdm, args, extract_all, shallow
 
     if sys.platform == "linux":

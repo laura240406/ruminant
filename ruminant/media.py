@@ -1,5 +1,5 @@
 import math
-from . import utils
+from . import utils, ruminant_profile
 from .buf import Buf
 from .modules import chew
 
@@ -3028,3 +3028,6 @@ class FFMpreg(object):
         return packet
 
     # BOOK New FFMpreg method
+
+
+ruminant_profile.add_class(FFMpreg)

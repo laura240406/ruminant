@@ -36,7 +36,8 @@ full = [
 ]
 dev = [
   "flake8",
-  "mypy"
+  "mypy",
+  "line_profiler"
 ]
 
 [tool.mypy]

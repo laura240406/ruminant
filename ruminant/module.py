@@ -1,5 +1,5 @@
 import os
-from . import buf, ruminant_types
+from . import buf, ruminant_types, ruminant_profile
 
 
 class RuminantModule(object):
@@ -39,5 +39,7 @@ def register(cls):
 
     modules.append(cls)
     modules.sort(key=lambda x: x.priority)
+
+    ruminant_profile.add_class(cls)
 
     return cls
