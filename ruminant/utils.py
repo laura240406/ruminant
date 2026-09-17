@@ -1805,7 +1805,7 @@ def unpack_snappy(blob):
     return bytes(data)
 
 
-def expand_ranges(s: Any, lower: int, upper: int) -> list[int]:
+def expand_ranges(s: Any, lower: int, upper: int | None) -> list[int] | None:
     if len(s.strip()) == 0:
         return []
 
@@ -1815,13 +1815,22 @@ def expand_ranges(s: Any, lower: int, upper: int) -> list[int]:
     for part in parts:
         if "-" in part:
             a, b = part.split("-")
+            a2, b2 = 0, 0
 
             if a != "":
-                lower = int(a)
-            if b != "":
-                upper = int(b)
+                a2 = int(a)
+            else:
+                a2 = lower
 
-            ranges += range(lower, upper + 1)
+            if b != "":
+                b2 = int(b)
+            else:
+                if upper is None:
+                    return None
+
+                b2 = upper
+
+            ranges += range(a2, b2 + 1)
         else:
             ranges.append(int(part))
 

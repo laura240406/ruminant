@@ -2643,7 +2643,7 @@ class FFMpreg(object):
         return frame
 
     @staticmethod
-    def find_start_codes(buf: Buf) -> list[tuple[int, int]]:
+    def find_start_codes(buf: Buf, limit: int = -1) -> list[tuple[int, int]]:
         """Scan the unit for occurences os the 000001 MPEG start code and return pairs of offset and length of each section"""
         bak = buf.backup()
         if buf.unit is None:
@@ -2654,6 +2654,9 @@ class FFMpreg(object):
             if buf.peek(3) == b"\x00\x00\x01":
                 buf.skip(3)
                 offsets.append(buf.tell())
+
+                if limit != -1 and len(offsets) > limit:
+                    break
             else:
                 buf.skip(1)
 

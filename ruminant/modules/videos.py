@@ -2318,8 +2318,9 @@ class MatroskaModule(module.RuminantModule):
             self.buf.sapunit()
 
         for stream in streams:
-            ranges: list[int] = utils.expand_ranges(
-                secrets.get_parameter("0", stream, "ranges"), 0, len(sample_offsets[stream["id"]]) - 1
+            ranges: list[int] = (
+                utils.expand_ranges(secrets.get_parameter("0", stream, "ranges"), 0, len(sample_offsets[stream["id"]]) - 1)
+                or []
             )
 
             if len(sample_offsets[stream["id"]]) == 0:
@@ -3628,7 +3629,9 @@ class MpegTsModule(module.RuminantModule):
                 if chunk["type"] == "es" and chunk["pid"] == pid and "header" in chunk:
                     ess.append(chunk)
 
-            ranges = utils.expand_ranges(secrets.get_parameter("0", meta["streams"][pid], "ranges"), 0, len(ess) - 1)
+            ranges: list[int] = (
+                utils.expand_ranges(secrets.get_parameter("0", meta["streams"][pid], "ranges"), 0, len(ess) - 1) or []
+            )
 
             if len(ess) == 0:
                 ranges = []
@@ -4427,7 +4430,7 @@ class DuckIvfModule(module.RuminantModule):
         ranges: list[int]
         match meta["format"]:
             case "AV01":
-                ranges = utils.expand_ranges(secrets.get_parameter("0", meta, "ranges"), 0, meta["frame-count"] - 1)
+                ranges = utils.expand_ranges(secrets.get_parameter("0", meta, "ranges"), 0, meta["frame-count"] - 1) or []
 
                 meta["samples"] = {}
                 for i in range(0, meta["frame-count"]):
@@ -4445,7 +4448,7 @@ class DuckIvfModule(module.RuminantModule):
                     else:
                         self.buf.skip(length)
             case "AV02":
-                ranges = utils.expand_ranges(secrets.get_parameter("0", meta, "ranges"), 0, meta["frame-count"] - 1)
+                ranges = utils.expand_ranges(secrets.get_parameter("0", meta, "ranges"), 0, meta["frame-count"] - 1) or []
 
                 meta["samples"] = {}
                 for i in range(0, meta["frame-count"]):
@@ -4510,7 +4513,7 @@ class JvtNalH264Module(module.RuminantModule):
         meta["type"] = "jvt-nal-h264"
 
         starts = FFMpreg.find_start_codes(self.buf)
-        ranges: list[int] = utils.expand_ranges(secrets.get_parameter("0", meta, "ranges"), 0, len(starts) - 2)
+        ranges: list[int] = utils.expand_ranges(secrets.get_parameter("0", meta, "ranges"), 0, len(starts) - 2) or []
 
         meta["nals"] = []
         for i in ranges:
@@ -4527,5 +4530,215 @@ class JvtNalH264Module(module.RuminantModule):
         FFMpreg.read_h264_nalu(self.buf, slim=True)
 
         self.buf.popunit()
+
+        return meta
+
+
+@module.register
+class DvdMpegSequenceModule(module.RuminantModule):
+    dev = True
+    desc = "DVD MPEG sequence files (the .VOB ones)."
+
+    @staticmethod
+    def identify(buf: Buf, ctx={}) -> bool:
+        return buf.pu32() == 0x000001ba
+
+    def chew(self) -> ruminant_types.JSON:
+        meta: dict = {}
+        meta["type"] = "mpeg-sequence"
+
+        streams = {}
+
+        meta["packs"] = []
+        while self.buf.pu32() == 0x000001ba:
+            pack = {}
+
+            self.buf.pasunit(2048)
+            self.buf.skip(4)
+
+            pack["pack-header-indicator"] = self.buf.rb(2)
+            pack["scr"] = self.buf.rb(46)
+            pack["mux-rate"] = self.buf.rb(22)
+            pack["marker1"] = self.buf.rb(1)
+            pack["marker2"] = self.buf.rb(1)
+            pack["reserved"] = self.buf.rb(5)
+            pack["stuffing-length"] = self.buf.rb(3)
+            pack["stuffing"] = self.buf.rh(pack["stuffing-length"])
+
+            i = pack["scr"]
+            pack["scr"] = (((i >> 43) & 7) << 30 | ((i >> 27) & 0x7fff) << 15 | ((i >> 11) & 0x7fff)) * 300 + (
+                (i >> 1) & 0x01ff
+            )
+
+            pack["packets"] = []
+
+            if self.buf.pu32() == 0x000001bb:
+                system_header = {"type": "system-header"}
+                self.buf.skip(4)
+                sys_header_length = self.buf.rb(16)
+                system_header["length"] = sys_header_length
+                system_header["payload"] = self.buf.rh(sys_header_length)
+                pack["packets"].append(system_header)
+
+            while self.buf.hasunit(4) and (self.buf.pu32() >> 8) == 0x000001:
+                pes = {}
+                start_code = self.buf.ru32()
+                stream_id = start_code & 0xff
+                pes["stream-id"] = stream_id
+                pes["length"] = self.buf.ru16()
+
+                if stream_id != 0xbd and stream_id not in streams:
+                    streams[stream_id] = utils.tempfd()
+
+                if stream_id in (0xbe, 0xbf):
+                    streams[stream_id].write(self.buf.read(pes["length"]))
+                else:
+                    pes["marker"] = self.buf.rb(2)
+                    pes["scrambling-control"] = self.buf.rb(2)
+                    pes["priority"] = self.buf.rb(1)
+                    pes["data-alignment"] = self.buf.rb(1)
+                    pes["copyright"] = self.buf.rb(1)
+                    pes["original"] = self.buf.rb(1)
+
+                    pts_dts_flags = self.buf.rb(2)
+                    pes["escr-flag"] = self.buf.rb(1)
+                    pes["es-rate-flag"] = self.buf.rb(1)
+                    pes["dsm-trick-mode-flag"] = self.buf.rb(1)
+                    pes["additional-copy-info-flag"] = self.buf.rb(1)
+                    pes["pes-crc-flag"] = self.buf.rb(1)
+                    pes["pes-extension-flag"] = self.buf.rb(1)
+
+                    pes_header_len = self.buf.ru8()
+                    header_bytes_read = 0
+
+                    if pts_dts_flags == 0b10:
+                        pts_raw = self.buf.rb(40)
+                        pes["pts"] = (
+                            ((pts_raw >> 33) & 0x07) << 30 | ((pts_raw >> 17) & 0x7fff) << 15 | ((pts_raw >> 1) & 0x7fff)
+                        )
+                        header_bytes_read += 5
+                    elif pts_dts_flags == 0b11:
+                        pts_raw = self.buf.rb(40)
+                        dts_raw = self.buf.rb(40)
+                        pes["pts"] = (
+                            ((pts_raw >> 33) & 0x07) << 30 | ((pts_raw >> 17) & 0x7fff) << 15 | ((pts_raw >> 1) & 0x7fff)
+                        )
+                        pes["dts"] = (
+                            ((dts_raw >> 33) & 0x07) << 30 | ((dts_raw >> 17) & 0x7fff) << 15 | ((dts_raw >> 1) & 0x7fff)
+                        )
+                        header_bytes_read += 10
+
+                    remaining_header = pes_header_len - header_bytes_read
+                    if remaining_header > 0:
+                        self.buf.skip(remaining_header)
+
+                    if pes["length"] == 0:
+                        payload_len = 2048 - self.buf.tell() % 2048
+                    else:
+                        payload_len = pes["length"] - 3 - pes_header_len
+
+                    if payload_len > 0:
+                        if stream_id == 0xbd:
+                            sub_stream_id = self.buf.ru8() | 0x100
+                            pes["sub-stream-id"] = sub_stream_id
+                            payload_len -= 1
+
+                            if sub_stream_id not in streams:
+                                streams[sub_stream_id] = utils.tempfd()
+
+                            streams[sub_stream_id].write(self.buf.read(payload_len))
+                        else:
+                            pes["payload-size"] = payload_len
+                            streams[stream_id].write(self.buf.read(payload_len))
+
+                pack["packets"].append(pes)
+
+            self.buf.sapunit()
+            meta["packs"].append(pack)
+
+        meta["streams"] = {}
+        for k, fd in streams.items():
+            fd.seek(0)
+            fd = Buf(fd)
+            data: dict = {}
+            meta["streams"]["0x" + hex(k)[2:].zfill(2)] = data
+
+            match k:
+                case (
+                    0xe0
+                    | 0xe1
+                    | 0xe2
+                    | 0xe3
+                    | 0xe4
+                    | 0xe5
+                    | 0xe6
+                    | 0xe7
+                    | 0xe8
+                    | 0xe9
+                    | 0xea
+                    | 0xeb
+                    | 0xec
+                    | 0xed
+                    | 0xee
+                    | 0xef
+                ):
+                    data["type"] = "MPEG-2 Video stream"
+                    ranges = utils.expand_ranges(secrets.get_parameter("0", data, "ranges"), 0, None)
+
+                    if ranges is None:
+                        packets = FFMpreg.find_start_codes(fd)
+                        ranges = list(range(len(packets)))
+                    else:
+                        packets = FFMpreg.find_start_codes(fd, limit=max(ranges) + 1)
+
+                    data["packets"] = {}
+                    for index in ranges:
+                        fd.seek(packets[index][0])
+                        fd.pasunit(packets[index][1])
+
+                        data["packets"][index] = FFMpreg.read_mpeg2_packet(fd)
+
+                        fd.sapunit()
+                case 0xbe:
+                    data["type"] = "Padding"
+                    data["blob"] = chew(fd, blob_mode=True)
+                case 0xbf:
+                    data["type"] = "Navigation stream"
+                    data["blob"] = chew(fd, blob_mode=True)
+                case 0x180 | 0x181 | 0x182 | 0x183 | 0x184 | 0x185 | 0x186 | 0x187:
+                    data["type"] = "AC-3 stream"
+
+                    ranges = utils.expand_ranges(secrets.get_parameter("0", data, "ranges"), 0, None)
+
+                    data["frames"] = {}
+                    if ranges is None:
+                        i = 0
+                        while fd.available():
+                            count = fd.ru8()
+                            fd.skip(fd.ru16() - 1)
+
+                            data["frames"][i] = []
+                            for j in range(0, count):
+                                data["frames"][i].append(FFMpreg.read_ac3_frame(fd))
+
+                            i += 1
+                    else:
+                        i = 0
+                        m = max(ranges)
+                        while i <= m:
+                            count = fd.ru8()
+                            fd.skip(fd.ru16() - 1)
+
+                            frames = []
+                            for j in range(0, count):
+                                frames.append(FFMpreg.read_ac3_frame(fd))
+
+                            if i in ranges:
+                                data["frames"][i] = frames
+
+                            i += 1
+                case _:
+                    data["blob"] = chew(fd)
+                    data["unknown"] = True
 
         return meta
