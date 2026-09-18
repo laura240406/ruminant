@@ -4581,11 +4581,13 @@ class DvdMpegSequenceModule(module.RuminantModule):
                 pack["packets"].append(system_header)
 
             while self.buf.hasunit(4) and (self.buf.pu32() >> 8) == 0x000001:
-                pes = {}
+                pes: dict = {}
                 start_code = self.buf.ru32()
                 stream_id = start_code & 0xff
                 pes["stream-id"] = stream_id
                 pes["length"] = self.buf.ru16()
+
+                self.buf.pasunit(pes["length"])
 
                 if stream_id != 0xbd and stream_id not in streams:
                     streams[stream_id] = utils.tempfd()
@@ -4609,14 +4611,13 @@ class DvdMpegSequenceModule(module.RuminantModule):
                     pes["pes-extension-flag"] = self.buf.rb(1)
 
                     pes_header_len = self.buf.ru8()
-                    header_bytes_read = 0
+                    self.buf.pasunit(pes_header_len)
 
                     if pts_dts_flags == 0b10:
                         pts_raw = self.buf.rb(40)
                         pes["pts"] = (
                             ((pts_raw >> 33) & 0x07) << 30 | ((pts_raw >> 17) & 0x7fff) << 15 | ((pts_raw >> 1) & 0x7fff)
                         )
-                        header_bytes_read += 5
                     elif pts_dts_flags == 0b11:
                         pts_raw = self.buf.rb(40)
                         dts_raw = self.buf.rb(40)
@@ -4626,30 +4627,23 @@ class DvdMpegSequenceModule(module.RuminantModule):
                         pes["dts"] = (
                             ((dts_raw >> 33) & 0x07) << 30 | ((dts_raw >> 17) & 0x7fff) << 15 | ((dts_raw >> 1) & 0x7fff)
                         )
-                        header_bytes_read += 10
 
-                    remaining_header = pes_header_len - header_bytes_read
-                    if remaining_header > 0:
-                        self.buf.skip(remaining_header)
+                    self.buf.sapunit()
 
-                    if pes["length"] == 0:
-                        payload_len = 2048 - self.buf.tell() % 2048
-                    else:
-                        payload_len = pes["length"] - 3 - pes_header_len
-
-                    if payload_len > 0:
+                    if self.buf.hasunit():
                         if stream_id == 0xbd:
                             sub_stream_id = self.buf.ru8() | 0x100
                             pes["sub-stream-id"] = sub_stream_id
-                            payload_len -= 1
 
                             if sub_stream_id not in streams:
                                 streams[sub_stream_id] = utils.tempfd()
 
-                            streams[sub_stream_id].write(self.buf.read(payload_len))
+                            streams[sub_stream_id].write(self.buf.read(self.buf.unit))
                         else:
-                            pes["payload-size"] = payload_len
-                            streams[stream_id].write(self.buf.read(payload_len))
+                            pes["payload-size"] = self.buf.unit
+                            streams[stream_id].write(self.buf.read(self.buf.unit))
+
+                self.buf.sapunit()
 
                 pack["packets"].append(pes)
 
