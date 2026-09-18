@@ -2457,9 +2457,6 @@ class FFMpreg(object):
         frame: dict = {}
         frame["offset"] = buf.tell()
 
-        buf.skip(3)
-        buf = Buf(buf.read(buf.unit).replace(b"\x00\x00\x03", b"\x00\x00"))
-
         typ = buf.ru8()
 
         if typ >= 1 and typ <= 0xaf:
