@@ -4657,24 +4657,7 @@ class DvdMpegSequenceModule(module.RuminantModule):
             meta["streams"]["0x" + hex(k)[2:].zfill(2)] = data
 
             match k:
-                case (
-                    0xe0
-                    | 0xe1
-                    | 0xe2
-                    | 0xe3
-                    | 0xe4
-                    | 0xe5
-                    | 0xe6
-                    | 0xe7
-                    | 0xe8
-                    | 0xe9
-                    | 0xea
-                    | 0xeb
-                    | 0xec
-                    | 0xed
-                    | 0xee
-                    | 0xef
-                ):
+                case 0xe0:
                     data["type"] = "MPEG-2 Video stream"
                     ranges = utils.expand_ranges(secrets.get_parameter("0", data, "ranges"), 0, None)
 
@@ -4690,6 +4673,24 @@ class DvdMpegSequenceModule(module.RuminantModule):
                         fd.pasunit(packets[index][1])
 
                         data["packets"][index] = FFMpreg.read_mpeg2_packet(fd)
+
+                        fd.sapunit()
+                case 0xe2:
+                    data["type"] = "H.264 Video stream"
+                    ranges = utils.expand_ranges(secrets.get_parameter("0", data, "ranges"), 0, None)
+
+                    if ranges is None:
+                        packets = FFMpreg.find_start_codes(fd)
+                        ranges = list(range(len(packets)))
+                    else:
+                        packets = FFMpreg.find_start_codes(fd, limit=max(ranges) + 1)
+
+                    data["packets"] = {}
+                    for index in ranges:
+                        fd.seek(packets[index][0])
+                        fd.pasunit(packets[index][1])
+
+                        data["packets"][index] = FFMpreg.read_h264_nalu(fd)
 
                         fd.sapunit()
                 case 0xbe:
