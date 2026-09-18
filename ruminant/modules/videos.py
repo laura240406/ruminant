@@ -4536,7 +4536,6 @@ class JvtNalH264Module(module.RuminantModule):
 
 @module.register
 class DvdMpegSequenceModule(module.RuminantModule):
-    dev = True
     desc = "DVD MPEG sequence files (the .VOB ones)."
 
     @staticmethod

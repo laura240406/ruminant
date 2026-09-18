@@ -2457,6 +2457,7 @@ class FFMpreg(object):
         frame: dict = {}
         frame["offset"] = buf.tell()
 
+        buf = Buf(buf.readunit())
         typ = buf.ru8()
 
         if typ >= 1 and typ <= 0xaf:
@@ -2632,9 +2633,14 @@ class FFMpreg(object):
 
                 frame["extra"] = extra.hex()
             case "User Data":
-                frame["user-data"] = buf.rh(buf.unit)
+                if buf.pu64() == 0x0087711281025781:
+                    buf.skip(8)
+                    frame["string"] = buf.rs(buf.ru16())
+                else:
+                    frame["user-data"] = buf.rh(buf.unit)
+                    frame["unknown"] = True
             case _:
-                frame["blob"] = chew(buf)
+                frame["blob"] = chew(buf, blob_mode=True)
                 frame["unknown"] = True
 
         return frame
