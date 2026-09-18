@@ -120,6 +120,7 @@ Ruminant is still in early alpha but it can already process the following file t
 * Dirac data units
 * JVT-NAL H.264
 * GRUB2 fonts
+* DVD .VOB files/MPEG-PS
 
 ## Video codecs
 Ruminant can extract and parse data units of specific codecs from specific containers.

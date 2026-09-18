@@ -4572,12 +4572,40 @@ class DvdMpegSequenceModule(module.RuminantModule):
             pack["packets"] = []
 
             if self.buf.pu32() == 0x000001bb:
-                system_header = {"type": "system-header"}
+                hdr: dict = {"type": "system-header"}
                 self.buf.skip(4)
-                sys_header_length = self.buf.rb(16)
-                system_header["length"] = sys_header_length
-                system_header["payload"] = self.buf.rh(sys_header_length)
-                pack["packets"].append(system_header)
+                hdr["length"] = self.buf.ru16()
+
+                self.buf.pasunit(hdr["length"])
+
+                hdr["marker0"] = self.buf.rb(1)
+                hdr["rate-bound"] = self.buf.rb(22) * 400
+                hdr["marker1"] = self.buf.rb(1)
+                hdr["audio-bound"] = self.buf.rb(6)
+                hdr["fixed"] = self.buf.rb(1)
+                hdr["csps"] = self.buf.rb(1)
+                hdr["system-audio-lock"] = self.buf.rb(1)
+                hdr["system-video-lock"] = self.buf.rb(1)
+                hdr["marker2"] = self.buf.rb(1)
+                hdr["video-bound"] = self.buf.rb(5)
+                hdr["packet-rate-restriction"] = self.buf.rb(1)
+                hdr["reserved"] = self.buf.rb(7)
+
+                hdr["descriptors"] = []
+                while self.buf.hasunit():
+                    if self.buf.pu8() & 0x80 == 0:
+                        break
+
+                    desc = {}
+                    desc["stream-id"] = self.buf.ru8()
+                    desc["reserved"] = self.buf.rb(2)
+                    tmp = self.buf.rb(1)
+                    desc["buffer"] = self.buf.rb(13) * (1024 if tmp else 128)
+                    hdr["descriptors"].append(desc)
+
+                self.buf.sapunit()
+
+                pack["packets"].append(hdr)
 
             while self.buf.hasunit(4) and (self.buf.pu32() >> 8) == 0x000001:
                 pes: dict = {}
