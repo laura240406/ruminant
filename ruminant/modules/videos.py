@@ -4759,6 +4759,27 @@ class DvdMpegSequenceModule(module.RuminantModule):
                                 data["frames"][i] = frames
 
                             i += 1
+                case 0xc0:
+                    data["type"] = "MP2/MP3 stream"
+
+                    ranges = utils.expand_ranges(secrets.get_parameter("0", data, "ranges"), 0, None)
+
+                    data["frames"] = {}
+                    if ranges is None:
+                        i = 0
+                        while fd.available():
+                            data["frames"][i] = FFMpreg.read_mp3_frame(fd)
+                            i += 1
+                    else:
+                        i = 0
+                        m = max(ranges)
+                        while i <= m:
+                            frame = FFMpreg.read_mp3_frame(fd)
+
+                            if i in ranges:
+                                data["frames"][i] = frame
+
+                            i += 1
                 case _:
                     data["blob"] = chew(fd)
                     data["unknown"] = True
