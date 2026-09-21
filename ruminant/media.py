@@ -3030,6 +3030,122 @@ class FFMpreg(object):
 
         return packet
 
+    @staticmethod
+    def read_prores_packet(buf: Buf) -> dict:
+        packet = {}
+        packet["header-length"] = buf.ru16()
+        packet["version"] = buf.ru8()
+        packet["reserved1"] = buf.ru8()
+        packet["creator"] = buf.rs(4)
+        packet["width"] = buf.ru16()
+        packet["height"] = buf.ru16()
+        packet["chroma-format"] = utils.unraw(
+            buf.ru8(),
+            1,
+            {
+                0x80: "4:2:2 Progressive",
+                0x84: "4:2:2 Interlaced (Top Field First)",
+                0x88: "4:2:2 Interlaced (Bottom Field First)",
+                0xc0: "4:4:4 Progressive",
+                0xc4: "4:4:4 Interlaced (Top Field First)",
+                0xc8: "4:4:4 Interlaced (Bottom Field First)",
+            },
+            True,
+        )
+        packet["aspect-ratio"] = utils.unraw(
+            buf.ru8(),
+            1,
+            {
+                0x00: "Unspecified",
+                0x01: "1:1 (Square Pixels)",
+                0x02: "4:3",
+                0x03: "16:9",
+            },
+            True,
+        )
+        packet["color-primaries"] = utils.unraw(
+            buf.ru8(),
+            1,
+            {
+                0x00: "Reserved",
+                0x01: "ITU-R BT.709",
+                0x02: "Unspecified",
+                0x04: "ITU-R BT.470 System M",
+                0x05: "ITU-R BT.470 System B, G",
+                0x06: "SMPTE 170M / ITU-R BT.601",
+                0x07: "SMPTE 240M",
+                0x08: "Generic Film (Illuminant C)",
+                0x09: "ITU-R BT.2020 / BT.2100",
+                0x0a: "SMPTE ST 428-1 (CIE 1931 XYZ)",
+                0x0b: "DCI-P3 (SMPTE RP 431-2)",
+                0x0c: "P3-D65 (SMPTE EG 432-1)",
+                0x16: "EBU Tech. 3213-E",
+            },
+            True,
+        )
+        packet["transfer-function"] = utils.unraw(
+            buf.ru8(),
+            1,
+            {
+                0x00: "Reserved",
+                0x01: "ITU-R BT.709",
+                0x02: "Unspecified",
+                0x04: "Gamma 2.2 Curve",
+                0x05: "Gamma 2.8 Curve",
+                0x06: "SMPTE 170M / ITU-R BT.601",
+                0x07: "SMPTE 240M",
+                0x08: "Linear",
+                0x09: "Logarithmic (100:1 range)",
+                0x0a: "Logarithmic (316.22777:1 range)",
+                0x0b: "IEC 61966-2-4",
+                0x0c: "ITU-R BT.1361 Extended Gamut",
+                0x0d: "IEC 61966-2-1 (sRGB)",
+                0x0e: "ITU-R BT.2020 (10-bit)",
+                0x0f: "ITU-R BT.2020 (12-bit)",
+                0x10: "SMPTE ST 2084 (PQ / HDR10)",
+                0x11: "SMPTE ST 428-1",
+                0x12: "ARIB STD-B67 (HLG)",
+            },
+            True,
+        )
+        packet["matrix-coefficients"] = utils.unraw(
+            buf.ru8(),
+            1,
+            {
+                0x00: "Identity / GBR",
+                0x01: "ITU-R BT.709",
+                0x02: "Unspecified",
+                0x04: "FCC Title 47 CFR 73.682",
+                0x05: "ITU-R BT.470 System B, G / BT.601 PAL",
+                0x06: "SMPTE 170M / ITU-R BT.601 NTSC",
+                0x07: "SMPTE 240M",
+                0x08: "YCgCo",
+                0x09: "ITU-R BT.2020 Non-constant Luminance",
+                0x0a: "ITU-R BT.2020 Constant Luminance",
+                0x0b: "SMPTE ST 2085",
+                0x0c: "Chromaticity-derived Non-constant Luminance",
+                0x0d: "Chromaticity-derived Constant Luminance",
+                0x0e: "ICtCp",
+            },
+            True,
+        )
+        packet["alpha-channel"] = utils.unraw(
+            buf.ru8(),
+            1,
+            {
+                0x00: "None",
+                0x01: "8-bit",
+                0x02: "16-bit",
+            },
+            True,
+        )
+        packet["reserved2"] = buf.ru8()
+        packet["quantization-flags"] = buf.ru8()
+        packet["luma-qmat"] = buf.rh(64)
+        packet["chroma-qmat"] = buf.rh(64)
+
+        return packet
+
     # BOOK New FFMpreg method
 
 

@@ -1,6 +1,7 @@
 from . import chew
 from .. import module, utils, constants, secrets, ruminant_types
 from ..buf import Buf
+from ..media import FFMpreg
 
 import tempfile
 import datetime
@@ -591,9 +592,152 @@ class RIFFModule(module.RuminantModule):
         self.strh_type = None
         meta["data"] = self.read_chunk()
 
+        if meta["type"] == "riff" and meta["data"]["data"].get("type") == "AVI ":
+            with self.buf:
+                try:
+                    meta["streams"] = self.parse_streams(meta)
+                except Exception as e:
+                    raise e
+                    pass
+
         return meta
 
-    def read_chunk(self):
+    def parse_streams(self, meta: dict) -> list[dict]:
+        streams: list[dict] = []
+        offsets: dict[int, list[tuple[int, int]]] = {}
+
+        idx1 = None
+        base = None
+        hdrl = None
+        for chunk in meta["data"]["data"]["chunks"]:
+            if chunk["type"] == "idx1":
+                idx1 = chunk
+            if chunk["type"] == "LIST" and chunk["data"]["type"] == "movi":
+                base = chunk["offset"] + 8
+            if chunk["type"] == "LIST" and chunk["data"]["type"] == "hdrl":
+                hdrl = chunk
+
+        assert idx1 is not None
+        assert base is not None
+        assert hdrl is not None
+
+        self.buf.seek(idx1["offset"])
+        self.buf.pasunit(idx1["length"])
+
+        self.buf.skip(8)
+
+        while self.buf.hasunit(16):
+            i = int(self.buf.rs(2))
+            self.buf.skip(6)
+
+            if i not in offsets:
+                offsets[i] = []
+
+            offset = self.buf.ru32l() + base + 8
+            length = self.buf.ru32l()
+            offsets[i].append((offset, length))
+
+        self.buf.sapunit()
+
+        index = 0
+        for chunk in hdrl["data"]["chunks"]:
+            if chunk["type"] != "LIST":
+                continue
+
+            stream = {}
+
+            typ = chunk["data"]["chunks"][0]["data"]["type"]
+            codec = None
+            match typ:
+                case "vids":
+                    codec = chunk["data"]["chunks"][1]["data"]["compression-method"]
+                case "auds":
+                    codec = chunk["data"]["chunks"][1]["data"]["format"]
+
+            assert codec is not None
+
+            stream["type"] = typ
+            stream["codec"] = codec
+
+            ranges: list[int] = utils.expand_ranges(secrets.get_parameter("0", stream, "ranges"), 0, len(offsets[index])) or []
+
+            stream["samples"] = {}
+            for i in ranges:
+                self.buf.seek(offsets[index][i][0])
+                self.buf.pasunit(offsets[index][i][1])
+
+                sample: Any = None
+                match codec:
+                    case "H264":
+                        sample = []
+
+                        for offset, length in FFMpreg.find_start_codes(self.buf):
+                            self.buf.seek(offset)
+                            self.buf.pasunit(length)
+
+                            sample.append(FFMpreg.read_h264_nalu(self.buf))
+
+                            self.buf.sapunit()
+                    case "MP3":
+                        sample = []
+                        while self.buf.hasunit():
+                            sample.append(FFMpreg.read_mp3_frame(self.buf))
+                    case "MPEG":
+                        sample = []
+                        while self.buf.hasunit():
+                            sample.append(FFMpreg.read_mp2_frame(self.buf))
+                    case "AV01":
+                        sample = []
+                        while self.buf.hasunit():
+                            sample.append(FFMpreg.read_av1_obu(self.buf))
+                    case "AC-3":
+                        sample = []
+                        while self.buf.hasunit():
+                            sample.append(FFMpreg.read_ac3_frame(self.buf))
+                    case "AAC":
+                        sample = []
+                        while self.buf.hasunit():
+                            sample.append(FFMpreg.read_aac_frame(self.buf))
+                    case "MJPG":
+                        with self.buf.subunit():
+                            sample = chew(self.buf)
+                    case "mpg2":
+                        sample = []
+
+                        for offset, length in FFMpreg.find_start_codes(self.buf):
+                            self.buf.seek(offset)
+                            self.buf.pasunit(length)
+
+                            sample.append(FFMpreg.read_mpeg2_packet(self.buf))
+
+                            self.buf.sapunit()
+                    case "H265" | "HVEC":
+                        sample = []
+
+                        for offset, length in FFMpreg.find_start_codes(self.buf):
+                            self.buf.seek(offset)
+                            self.buf.pasunit(length)
+
+                            sample.append(FFMpreg.read_h265_nalu(self.buf))
+
+                            self.buf.sapunit()
+                    case "drac":
+                        sample = []
+                        while self.buf.hasunit():
+                            sample.append(FFMpreg.read_dirac_packet(self.buf))
+                    case _:
+                        with self.buf.subunit():
+                            sample = {"blob": chew(self.buf, blob_mode=True), "unknown": True}
+
+                stream["samples"][i] = sample
+                self.buf.sapunit()
+
+            streams.append(stream)
+            index += 1
+
+        return streams
+
+    def read_chunk(self) -> dict:
         chunk = {}
 
         typ = self.buf.rs(4)
@@ -619,13 +763,13 @@ class RIFFModule(module.RuminantModule):
             case "VP8L":
                 chunk["data"]["signature"] = self.buf.rh(1)
                 tag = self.buf.ru32l()
-                for field in ("width", "height"):
+                for fld in ("width", "height"):
                     i = 1
                     for j in range(0, 14):
                         i += (tag & 1) << j
                         tag >>= 1
 
-                    chunk["data"][field] = i
+                    chunk["data"][fld] = i
 
                 chunk["data"]["has-alpha"] = bool(tag & 1)
                 chunk["data"]["version"] = ((tag >> 1) & 1) | (((tag >> 2) & 1) << 1) | (((tag >> 3) & 1) << 2)
@@ -699,13 +843,7 @@ class RIFFModule(module.RuminantModule):
                 chunk["data"]["handler"] = self.buf.rs(4)
                 chunk["data"]["flags"] = self.buf.rh(4)
                 chunk["data"]["priority"] = self.buf.ru16l()
-
-                language = self.buf.ru16l()
-                chunk["data"]["language"] = {
-                    "raw": language,
-                    "name": constants.MICROSOFT_LCIDS.get(language, "Unknown"),
-                }
-
+                chunk["data"]["language"] = utils.unraw(self.buf.ru16l(), 2, constants.MICROSOFT_LCIDS, True)
                 chunk["data"]["initial-frames"] = self.buf.ru32l()
                 chunk["data"]["scale"] = self.buf.ru32l()
                 chunk["data"]["rate"] = self.buf.ru32l()
@@ -733,10 +871,10 @@ class RIFFModule(module.RuminantModule):
                         chunk["data"]["used-color-count"] = self.buf.ru32l()
                         chunk["data"]["important-color-count"] = self.buf.ru32l()
                     case "auds":
-                        format_tag = self.buf.ru16l()
-                        chunk["data"]["format"] = {
-                            "raw": format_tag,
-                            "name": {
+                        chunk["data"]["format"] = utils.unraw(
+                            self.buf.ru16l(),
+                            2,
+                            {
                                 0x0001: "PCM",
                                 0x0050: "MPEG",
                                 0x0055: "MP3",
@@ -744,9 +882,11 @@ class RIFFModule(module.RuminantModule):
                                 0x00ff: "AAC",
                                 0x0161: "WMA",
                                 0x2001: "DTS",
+                                0x566f: "Vorbis",
                                 0xf1ac: "FLAC",
-                            }.get(format_tag, "Unknown"),
-                        }
+                            },
+                            True,
+                        )
 
                         chunk["data"]["channel-count"] = self.buf.ru16l()
                         chunk["data"]["sample-rate"] = self.buf.ru32l()
@@ -784,7 +924,7 @@ class RIFFModule(module.RuminantModule):
 
                 chunk["data"]["fields"] = []
                 for i in range(0, field_count):
-                    field = {}
+                    field: dict = {}
                     field["compressed-width"] = self.buf.ru32l()
                     field["compressed-height"] = self.buf.ru32l()
                     field["valid-width"] = self.buf.ru32l()
@@ -859,7 +999,7 @@ class RIFFModule(module.RuminantModule):
             case "SNDM":
                 chunk["data"]["entries"] = []
 
-                while self.buf.unit >= 12:
+                while self.buf.hasunit(12):
                     entry = {}
                     length = self.buf.ru32()
                     entry["key"] = self.buf.rs(4)
@@ -889,15 +1029,14 @@ class RIFFModule(module.RuminantModule):
                     chunk["data"]["chunks"] = []
 
                     while self.buf.unit:
-                        list_chunk = self.read_chunk()
-                        chunk["data"]["chunks"].append(list_chunk)
+                        chunk["data"]["chunks"].append(self.read_chunk())
             case "data" | "JUNK" | "idx1" | "indx" | "ix00" | "ix01":
                 pass
             case _:
                 chunk["data"]["unknown"] = True
 
                 with self.buf.subunit():
-                    chunk["data"]["blob"] = chew(self.buf)
+                    chunk["data"]["blob"] = chew(self.buf, blob_mode=True)
 
         self.buf.skipunit()
         self.buf.popunit()

@@ -134,28 +134,28 @@ Ruminant can extract and parse data units of specific codecs from specific conta
 
 empty means the container doesn't support it
 
-|Codec|MP4|MKV|MPEG-TS|Duck IVF|HEIF|MPEG-PS|
-|-|-|-|-|-|-|-|
-|MPEG-2|🚧|🚧|🚧|||🚧|
-|H.264|✅|✅|✅||✅|✅|
-|H.265|🚧|🚧|🚧||🚧||
-|H.266|🚧|🚧|🚧||🚧||
-|AV1|✅|✅||✅|✅||
-|AV2|🚧|🚧||🚧|❌||
-|Dirac|✅|✅|✅||||
-|ProRes||✅|||||
-|Vorbis|🚧|🚧|||||
-|Theora||🚧|||||
-|AC-3|✅|✅|✅|||✅|
-|MP2|✅|✅|✅||||
-|MP3|✅|✅|✅||||
-|AAC|❌|❌|✅||||
-|FLAC|🚧|🚧|||||
-|Opus|🚧|🚧|||||
-|TX3G|✅||||||
-|METT|✅|||||
-|DVBSUB||✅|✅|||
-|Teletext|||✅|||
+|Codec|MP4|MKV|MPEG-TS|Duck IVF|HEIF|MPEG-PS|AVI|
+|-|-|-|-|-|-|-|-|
+|MPEG-2|🚧|🚧|🚧|||🚧|🚧|
+|H.264|✅|✅|✅||✅|✅|✅|
+|H.265|🚧|🚧|🚧||🚧||🚧|
+|H.266|🚧|🚧|🚧||🚧|||
+|AV1|✅|✅||✅|✅||✅|
+|AV2|🚧|🚧||🚧|❌|||
+|Dirac|✅|✅|✅||||✅|
+|ProRes||✅|||||❌|
+|Vorbis|🚧|🚧|||||❌|
+|Theora||🚧|||||❌|
+|AC-3|✅|✅|✅|||✅|✅|
+|MP2|✅|✅|✅||||✅|
+|MP3|✅|✅|✅||||✅|
+|AAC|❌|❌|✅||||❌|
+|FLAC|🚧|🚧|||||❌|
+|Opus|🚧|🚧||||||
+|TX3G|✅|||||||
+|METT|✅||||||
+|DVBSUB||✅|✅||||
+|Teletext|||✅||||
 
 # How do I install it?
 Run `pip3 install ruminant\[full\]` if you want C acceleration or `pip3 install ruminant` if you want pure Python.
