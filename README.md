@@ -135,7 +135,7 @@ Ruminant can extract and parse data units of specific codecs from specific conta
 empty means the container doesn't support it
 
 |Codec|MP4|MKV|MPEG-TS|Duck IVF|HEIF|MPEG-PS|
-|-|-|-|-|-|-||
+|-|-|-|-|-|-|-|
 |MPEG-2|🚧|🚧|🚧|||🚧|
 |H.264|✅|✅|✅||✅|✅|
 |H.265|🚧|🚧|🚧||🚧||
