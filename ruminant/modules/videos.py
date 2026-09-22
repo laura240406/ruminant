@@ -1236,30 +1236,42 @@ class IsoModule(module.RuminantModule):
                 atom["data"]["sublayers-count"] = self.buf.rb(3)
                 atom["data"]["constant-frame-rate"] = self.buf.rb(2)
                 atom["data"]["chroma-format-idc"] = self.buf.rb(2)
+
                 atom["data"]["bit-depth-minus-eight"] = self.buf.rb(3)
                 atom["data"]["reserved2"] = self.buf.rb(5)
 
-                atom["data"]["general-constraint-info-bytes"] = self.buf.ru8()
-                atom["data"]["general-constraint-info"] = self.buf.rh(atom["data"]["general-constraint-info-bytes"])
+                atom["data"]["reserved-constraint"] = self.buf.rb(2)
+                atom["data"]["general-constraint-info-bytes"] = self.buf.rb(6)
 
                 atom["data"]["general-profile-idc"] = self.buf.rb(7)
                 atom["data"]["general-tier-flag"] = self.buf.rb(1)
                 atom["data"]["general-level-idc"] = self.buf.ru8()
+
                 atom["data"]["ptl-frame-only-constraint-flag"] = self.buf.rb(1)
                 atom["data"]["ptl-multi-layer-enabled-flag"] = self.buf.rb(1)
 
-                if atom["data"]["sublayers-count"] > 1:
-                    temp = self.buf.rb(atom["data"]["sublayers-count"] - 1)
-                    atom["data"]["ptl-sublayer-level-present-flag"] = self.buf.rb(atom["data"]["sublayers-count"] - 1)
+                num_constraint_bytes = atom["data"]["general-constraint-info-bytes"]
+                if num_constraint_bytes > 0:
+                    atom["data"]["general-constraint-info"] = self.buf.rb((num_constraint_bytes - 1) * 8)
+                    atom["data"]["general-constraint-info-tail"] = self.buf.rb(6)
                     self.buf.align()
-                    atom["data"]["sublayer-level-idc"] = self.buf.rh(temp.bit_count())
+
+                if atom["data"]["sublayers-count"] > 1:
+                    flags_byte = self.buf.ru8()
+                    atom["data"]["ptl-sublayer-level-present-flags"] = flags_byte
+
+                    sublayer_idcs = []
+                    for i in range(atom["data"]["sublayers-count"] - 2, -1, -1):
+                        if (flags_byte >> i) & 1:
+                            sublayer_idcs.append(self.buf.ru8())
+                    atom["data"]["sublayer-level-idc"] = sublayer_idcs
 
                 atom["data"]["ptl-sub-profile-count"] = self.buf.ru8()
                 atom["data"]["ptl-sub-profiles"] = self.buf.rh(atom["data"]["ptl-sub-profile-count"] * 4)
 
                 atom["data"]["max-picture-width"] = self.buf.ru16()
                 atom["data"]["max-picture-height"] = self.buf.ru16()
-                atom["data"]["avg-frame-rate"] = self.buf.ru16() / 256
+                atom["data"]["avg-frame-rate"] = self.buf.ru16()
 
             atom["data"]["array-count"] = self.buf.ru8()
             atom["data"]["arrays"] = []
@@ -1267,15 +1279,19 @@ class IsoModule(module.RuminantModule):
                 array = {}
                 array["completeness"] = self.buf.rb(1)
                 array["reserved"] = self.buf.rb(2)
-                array["type"] = utils.unraw(self.buf.rb(5), 1, FFMpreg.H266_NAL_UNIT_TYPES, True)
 
-                array["nalu-count"] = self.buf.ru16()
+                nal_type_raw = self.buf.rb(5)
+                array["type"] = utils.unraw(nal_type_raw, 1, FFMpreg.H266_NAL_UNIT_TYPES, True)
+
+                if nal_type_raw not in (19, 20):
+                    array["nalu-count"] = self.buf.ru16()
+                else:
+                    array["nalu-count"] = 1
+
                 array["nalus"] = []
-                for i in range(0, array["nalu-count"]):
+                for j in range(0, array["nalu-count"]):
                     self.buf.pasunit(self.buf.ru16())
-
                     array["nalus"].append(FFMpreg.read_h266_nalu(self.buf))
-
                     self.buf.sapunit()
 
                 atom["data"]["arrays"].append(array)
