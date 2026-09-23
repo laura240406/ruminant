@@ -1089,7 +1089,7 @@ class JPEGModule(module.RuminantModule):
                 self.buf.skip(6)
                 chunk["data"]["entry-count"] = self.buf.ru32()
                 chunk["data"]["entries"] = [self.buf.ru32l() for i in range(0, chunk["data"]["entry-count"])]
-            elif typ == 0xeb and self.buf.peek(8) == b"JP\x13\x00\x00\x00\x00\x00":
+            elif typ == 0xeb and self.buf.peek(2) == b"JP":
                 with self.buf.subunit():
                     self.buf.skip(8)
                     chunk["data"]["jumbf"] = chew(self.buf)
