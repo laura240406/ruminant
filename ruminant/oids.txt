@@ -768,6 +768,8 @@
 1.3.6.1.4.1.11129.2.4.3: googlePrecertificatePoison
 1.3.6.1.4.1.11129.2.4.4: googlePrecertificateCA
 1.3.6.1.4.1.11129.2.4.5: googleOcspSignedCertificateTimestamp
+1.3.6.1.4.1.11129.2.10: ???
+1.3.6.1.4.1.11129.2.10.1: ???
 1.3.6.1.4.1.11591: gnu
 1.3.6.1.4.1.11591.1: gnuRadius
 1.3.6.1.4.1.11591.2: gnupg-egypt
@@ -897,6 +899,14 @@
 1.3.6.1.4.1.57264.1: fulcio
 1.3.6.1.4.1.57264.1.1: issuer
 1.3.6.1.4.1.57264.1.8: issuer-v2
+1.3.6.1.4.1.62558: Coalition for Content Provenance and Authenticity (C2PA)
+1.3.6.1.4.1.62558.1: c2pa-cp
+1.3.6.1.4.1.62558.1.1: ???
+1.3.6.1.4.1.62558.2: c2pa-kp
+1.3.6.1.4.1.62558.2.1: c2pa-kp-claimSigning
+1.3.6.1.4.1.62558.3: c2pa-al
+1.3.6.1.4.1.62558.3.10: c2pa-assuranceLevel-1
+1.3.6.1.4.1.62558.4: c2pa-cpl-record
 1.3.6.1.5: security
 1.3.6.1.5.2: kerberosV
 1.3.6.1.5.2.3: pkinit
