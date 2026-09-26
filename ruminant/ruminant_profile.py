@@ -4,7 +4,7 @@ import atexit
 
 has_profile = True
 try:
-    from line_profiler import LineProfiler
+    from line_profiler import LineProfiler, show_text
 except ImportError:
     has_profile = False
 
@@ -14,8 +14,11 @@ if profile:
     lp = LineProfiler()
 
     def save():
+        stats = lp.get_stats()
+        filtered_timings = {key: hits for key, hits in stats.timings.items() if hits and any(nhits > 0 for _, nhits, _ in hits)}
+
         with open("ruminant_profile.txt", "w") as f:
-            lp.print_stats(stream=f)
+            show_text(filtered_timings, stats.unit, stream=f)
 
     atexit.register(save)
 
