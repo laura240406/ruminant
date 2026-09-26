@@ -22,7 +22,7 @@ import json
 import tempfile
 import re
 import lzma
-from typing import Any, cast
+from typing import Any, cast, BinaryIO
 
 
 # inner part of xml_to_dict
@@ -1835,3 +1835,104 @@ def expand_ranges(s: Any, lower: int, upper: int | None) -> list[int] | None:
             ranges.append(int(part))
 
     return sorted(list(set(ranges)))
+
+
+def decompress_lz4_block(chunk: bytes, history: bytearray) -> bytes:
+    buf = Buf(chunk)
+    out = bytearray()
+
+    while buf.available() > 0:
+        token = buf.ru8()
+
+        lit_len = token >> 4
+        if lit_len == 15:
+            while True:
+                extra = buf.ru8()
+                lit_len += extra
+                if extra != 255:
+                    break
+
+        if lit_len > 0:
+            literals = buf.read(lit_len)
+            out.extend(literals)
+            history.extend(literals)
+
+        if buf.available() == 0:
+            break
+
+        offset = buf.ru16l()
+
+        if offset == 0:
+            raise ValueError("Invalid offset 0 in LZ4 block")
+
+        match_nibble = token & 0x0f
+        match_len = match_nibble + 4
+        if match_nibble == 15:
+            while True:
+                extra = buf.ru8()
+                match_len += extra
+                if extra != 255:
+                    break
+
+        for _ in range(match_len):
+            b = history[-offset]
+            out.append(b)
+            history.append(b)
+
+    return bytes(out)
+
+
+def decompress_lz4_frame(buf: Buf, fd: BinaryIO) -> dict:
+    magic = buf.ru32l()
+    assert magic == 0x184d2204 or magic & 0xfffffff0 == 0x184d2a50
+
+    if magic & 0xfffffff0 == 0x184d2a50:
+        return {"id": magic & 0x0f, "content": buf.rh(buf.ru32l())}
+
+    frame: dict = {}
+    frame["version"] = buf.rb(2)
+    frame["b-indep"] = buf.rb(1)
+    frame["b-checksum"] = buf.rb(1)
+    frame["c-size"] = buf.rb(1)
+    frame["c-checksum"] = buf.rb(1)
+    frame["reserved0"] = buf.rb(1)
+    frame["dict-id-present"] = buf.rb(1)
+
+    frame["reserved1"] = buf.rb(1)
+    frame["block-max-size"] = buf.rb(3)
+    frame["reserved2"] = buf.rb(4)
+
+    if frame["c-size"]:
+        frame["size"] = buf.ru64l()
+
+    if frame["dict-id-present"]:
+        frame["dict-id"] = buf.ru32l()
+
+    frame["header-checksum"] = buf.ru8()
+
+    running = True
+    history: bytearray = bytearray()
+    while running:
+        size = buf.ru32l()
+
+        if size == 0:
+            running = False
+
+        chunk = buf.read(size & 0x7fffffff)
+
+        if size >> 31:
+            fd.write(chunk)
+            history.extend(chunk)
+        else:
+            fd.write(decompress_lz4_block(chunk, history))
+
+        if len(history) > 65536:
+            del history[:-65536]
+
+        if frame["b-checksum"]:
+            buf.skip(4)
+
+    if frame["c-checksum"]:
+        frame["footer-checksum"] = buf.ru32l()
+
+    return frame

@@ -21,6 +21,7 @@ Ruminant is still in early alpha but it can already process the following file t
 * Zstd
 * Zlib
 * XZ
+* LZ4
 * ZIP
   * embedded Android APK signatures
   * ZipCrypto encryption, no AES though

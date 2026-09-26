@@ -324,3 +324,36 @@ class XzModule(module.RuminantModule):
         meta["data"] = chew(fd)
 
         return meta
+
+
+@module.register
+class Lz4Module(module.RuminantModule):
+    desc = "lz4 streams."
+
+    @staticmethod
+    def identify(buf: Buf, ctx={}) -> bool:
+        if buf.available() < 4:
+            return False
+
+        magic = buf.pu32l()
+
+        return magic == 0x184d2204 or magic & 0xfffffff0 == 0x184d2a50
+
+    def chew(self) -> ruminant_types.JSON:
+        meta: dict = {}
+        meta["type"] = "lz4"
+
+        meta["frames"] = []
+        fd = utils.tempfd()
+        while self.buf.available() > 4:
+            magic = self.buf.pu32l()
+
+            if not (magic == 0x184d2204 or magic & 0xfffffff0 == 0x184d2a50):
+                break
+
+            meta["frames"].append(utils.decompress_lz4_frame(self.buf, fd))
+
+        fd.seek(0)
+        meta["blob"] = chew(fd)
+
+        return meta
