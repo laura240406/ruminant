@@ -27,7 +27,10 @@ def add_class(cls):
     if not profile:
         return
 
-    for _, method in inspect.getmembers(cls, predicate=inspect.isroutine):
+    for name, method in inspect.getmembers(cls, predicate=inspect.isroutine):
+        if name.startswith("__"):
+            continue
+
         lp.add_function(method)
 
 
