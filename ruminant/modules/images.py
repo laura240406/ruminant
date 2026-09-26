@@ -2266,17 +2266,15 @@ class GifModule(module.RuminantModule):
         meta["header"] = {}
         meta["header"]["width"] = self.buf.ru16l()
         meta["header"]["height"] = self.buf.ru16l()
-
-        gct = self.buf.ru8()
-        meta["header"]["gct-size"] = 2 ** ((gct >> 5) + 1) * 3
-        meta["header"]["is-sorted"] = bool((gct >> 4) & 1)
-        meta["header"]["color-resolution"] = (gct >> 1) & 0x07
-        meta["header"]["gct-present"] = bool(gct & 1)
+        meta["header"]["gct-present"] = self.buf.rb(1)
+        meta["header"]["color-resolution"] = self.buf.rb(3)
+        meta["header"]["sorted"] = self.buf.rb(1)
+        meta["header"]["gct-exponent"] = self.buf.rb(3)
         meta["header"]["background-color-index"] = self.buf.ru8()
         meta["header"]["pixel-aspect-ratio"] = self.buf.ru8()
 
         if meta["header"]["gct-present"]:
-            self.buf.skip(meta["header"]["gct-size"])
+            self.buf.skip((2 ** (meta["header"]["gct-exponent"] + 1)) * 3)
 
         meta["blocks"] = []
         running = True
@@ -2309,64 +2307,43 @@ class GifModule(module.RuminantModule):
                 case 0x21:
                     block["type"] = "extension"
                     label = self.buf.ru8()
-                    block["label"] = label
-                    block["size"] = self.buf.ru8()
 
-                    processed_subdata = False
+                    buf = Buf(self.read_subblocks())
                     match label:
                         case 0xf9:
                             block["extension"] = "gce"
 
-                            flags = self.buf.ru8()
                             block["data"] = {
-                                "reserved": flags >> 5,
-                                "disposal-method": (flags >> 2) & 0x07,
-                                "user-input-flag": bool(flags & 0x02),
-                                "transparent-color-flag": bool(flags & 0x01),
-                                "delay-time": self.buf.ru16(),
-                                "transparent-color-index": self.buf.ru8(),
+                                "reserved": buf.rb(3),
+                                "disposal-method": buf.rb(3),
+                                "user-input-flag": buf.rb(1),
+                                "transparent-color-flag": buf.rb(1),
+                                "delay-time": buf.ru16(),
+                                "transparent-color-index": buf.ru8(),
                             }
                         case 0xfe:
                             block["extension"] = "comment"
-                            block["data"] = utils.decode(self.read_subblocks())
-                            processed_subdata = True
+                            block["data"] = buf.rs(buf.available())
                         case 0xff:
                             block["extension"] = "application"
-                            block["application"] = self.buf.rs(block["size"])
+                            block["application"] = buf.rs(11)
 
                             match block["application"]:
                                 case "NETSCAPE2.0":
-                                    data = self.read_subblocks()
+                                    data = buf.read(buf.available())
                                     block["data"] = {
                                         "id": data[0],
                                         "loop": int.from_bytes(data[1:], "big"),
                                     }
-
-                                    processed_subdata = True
                                 case "XMP DataXMP":
-                                    data = b""
-                                    while self.buf.pu8() != 0x01:
-                                        data += self.buf.read(1)
-
-                                    while self.buf.pu8() != 0:
-                                        self.buf.skip(1)
-
-                                    self.buf.skip(2)
-
-                                    block["data"] = utils.xml_to_dict(data.decode("utf-8"))
-
-                                    processed_subdata = True
+                                    block["data"] = utils.xml_to_dict(buf.rs(buf.available()))
                                 case _:
+                                    block["data"] = buf.rh(buf.available())
                                     block["unknown"] = True
                         case _:
-                            block["data"] = self.buf.rh(block["size"])
+                            block["extension"] = label
+                            block["data"] = buf.rh(buf.available())
                             block["unknown"] = True
-
-                    if not processed_subdata:
-                        if self.buf.peek(1)[0]:
-                            block["subdata"] = self.read_subblocks().hex()
-                        else:
-                            self.buf.skip(1)
                 case 0x3b:
                     block["type"] = "end"
                     running = False
