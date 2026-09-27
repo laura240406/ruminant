@@ -1246,7 +1246,12 @@ class JPEGModule(module.RuminantModule):
                         value_length = record_length - key_length - 8
                         record["content"]["value-length"] = value_length
                         record["content"]["name"] = self.buf.rs(key_length)
-                        record["content"]["value"] = self.buf.rs(value_length, "latin-1")
+
+                        match record["content"]["name"]:
+                            case "deco_doodle_bitmap" | "Captured_App_Info" | "PhotoEditor_Re_Edit_Data":
+                                record["content"]["value"] = chew(self.buf.read(value_length))
+                            case _:
+                                record["content"]["value"] = self.buf.rs(value_length, "latin-1")
 
                     meta["seft"]["records"].append(record)
 
