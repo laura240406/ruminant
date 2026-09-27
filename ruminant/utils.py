@@ -11,6 +11,7 @@ from .constants import (
 from .buf import Buf, _decode
 from .modules import chew
 from .module import debug
+from .crypto import native_mode
 import uuid
 import xml.etree.ElementTree as ET
 from datetime import datetime, timezone, timedelta
@@ -1837,52 +1838,118 @@ def expand_ranges(s: Any, lower: int, upper: int | None) -> list[int] | None:
     return sorted(list(set(ranges)))
 
 
-def decompress_lz4_block(chunk: bytes, history: bytearray) -> bytes:
-    buf = Buf(chunk)
-    out = bytearray()
+has_lz4 = not native_mode
+try:
+    import lz4.block
+except ImportError:
+    has_lz4 = False
 
-    while buf.available() > 0:
-        token = buf.ru8()
+if has_lz4:
 
-        lit_len = token >> 4
-        if lit_len == 15:
-            while True:
-                extra = buf.ru8()
-                lit_len += extra
-                if extra != 255:
+    def decompress_lz4_block(buf: Buf, fd: BinaryIO, history: bytearray, has_checksum: bool, independent: bool) -> bool:
+        size = buf.ru32l()
+
+        if size == 0:
+            return False
+
+        buf.pasunit(size & 0x7fffffff)
+
+        if size >> 31:
+            chunk = buf.readunit()
+            fd.write(chunk)
+            history.extend(chunk)
+        else:
+            compressed = buf.readunit()
+            decompressed = lz4.block.decompress(compressed, uncompressed_size=2**24, dict=bytes(history))
+            fd.write(decompressed)
+            history.extend(decompressed)
+
+        buf.sapunit()
+
+        if len(history) > 65536:
+            del history[:-65536]
+
+        if independent:
+            history.clear()
+
+        if has_checksum:
+            buf.skip(4)
+
+        return True
+
+else:
+
+    def decompress_lz4_block(buf: Buf, fd: BinaryIO, history: bytearray, has_checksum: bool, independent: bool) -> bool:
+        size = buf.ru32l()
+
+        if size == 0:
+            return False
+
+        buf.pasunit(size & 0x7fffffff)
+
+        if size >> 31:
+            chunk = buf.readunit()
+            fd.write(chunk)
+            history.extend(chunk)
+        else:
+            out = bytearray()
+
+            while buf.hasunit():
+                token = buf.ru8()
+
+                lit_len = token >> 4
+                if lit_len == 15:
+                    while True:
+                        extra = buf.ru8()
+                        lit_len += extra
+                        if extra != 255:
+                            break
+
+                if lit_len > 0:
+                    literals = buf.read(lit_len)
+                    out.extend(literals)
+                    history.extend(literals)
+
+                if not buf.hasunit():
                     break
 
-        if lit_len > 0:
-            literals = buf.read(lit_len)
-            out.extend(literals)
-            history.extend(literals)
+                offset = buf.ru16l()
 
-        if buf.available() == 0:
-            break
+                if offset == 0:
+                    raise ValueError("Invalid offset 0 in LZ4 block")
 
-        offset = buf.ru16l()
+                match_nibble = token & 0x0f
+                match_len = match_nibble + 4
+                if match_nibble == 15:
+                    while True:
+                        extra = buf.ru8()
+                        match_len += extra
+                        if extra != 255:
+                            break
 
-        if offset == 0:
-            raise ValueError("Invalid offset 0 in LZ4 block")
+                for _ in range(match_len):
+                    b = history[-offset]
+                    out.append(b)
+                    history.append(b)
 
-        match_nibble = token & 0x0f
-        match_len = match_nibble + 4
-        if match_nibble == 15:
-            while True:
-                extra = buf.ru8()
-                match_len += extra
-                if extra != 255:
-                    break
+            fd.write(out)
 
-        for _ in range(match_len):
-            b = history[-offset]
-            out.append(b)
-            history.append(b)
+        buf.sapunit()
 
-    return bytes(out)
+        if len(history) > 65536:
+            del history[:-65536]
+
+        if independent:
+            history = bytearray()
+
+        if has_checksum:
+            buf.skip(4)
+
+        return True
 
 
 def decompress_lz4_frame(buf: Buf, fd: BinaryIO) -> dict:
+    offset = buf.tell()
     magic = buf.ru32l()
     assert magic == 0x184d2204 or magic & 0xfffffff0 == 0x184d2a50
 
@@ -1913,29 +1980,11 @@ def decompress_lz4_frame(buf: Buf, fd: BinaryIO) -> dict:
     running = True
     history: bytearray = bytearray()
     while running:
-        size = buf.ru32l()
-
-        if size == 0:
-            running = False
-
-        chunk = buf.read(size & 0x7fffffff)
-
-        if size >> 31:
-            fd.write(chunk)
-            history.extend(chunk)
-        else:
-            fd.write(decompress_lz4_block(chunk, history))
-
-        if len(history) > 65536:
-            del history[:-65536]
-
-        if frame["b-indep"]:
-            history = bytearray()
-
-        if frame["b-checksum"]:
-            buf.skip(4)
+        running = decompress_lz4_block(buf, fd, history, frame["b-checksum"], frame["b-indep"])
 
     if frame["c-checksum"]:
         frame["footer-checksum"] = buf.ru32l()
+
+    frame["length"] = buf.tell() - offset
 
     return frame

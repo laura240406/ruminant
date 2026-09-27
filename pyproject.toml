@@ -32,7 +32,8 @@ full = [
   "pyzstd",
   "cryptography",
   "pycryptodome",
-  "argon2-cffi"
+  "argon2-cffi",
+  "lz4"
 ]
 dev = [
   "flake8",
