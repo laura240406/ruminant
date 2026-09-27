@@ -903,6 +903,9 @@ class JavaClassModule(module.RuminantModule):
                 67: "Java SE 23",
                 68: "Java SE 24",
                 69: "Java SE 25",
+                70: "Java SE 26",
+                71: "Java SE 27",
+                72: "Java SE 28",
             },
         )
 
