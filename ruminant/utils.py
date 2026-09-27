@@ -1929,6 +1929,9 @@ def decompress_lz4_frame(buf: Buf, fd: BinaryIO) -> dict:
         if len(history) > 65536:
             del history[:-65536]
 
+        if frame["b-indep"]:
+            history = bytearray()
+
         if frame["b-checksum"]:
             buf.skip(4)
 
