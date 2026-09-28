@@ -3122,6 +3122,9 @@ class MpegTsModule(module.RuminantModule):
 
     @staticmethod
     def identify(buf: Buf, ctx={}) -> bool:
+        if buf.available() > 196 and buf.peek(5)[4] == 0x47:
+            return True
+
         if buf.available() < 188:
             return False
         if buf.available() == 188:
@@ -3383,9 +3386,11 @@ class MpegTsModule(module.RuminantModule):
         slack: dict = {}
         starts: dict = {}
 
+        peek_width = 5 if self.buf.peek(5)[4] == 0x47 else 1
+
         index = 0
-        while self.buf.peek(1) == b"\x47":
-            self.buf.skip(1)
+        while self.buf.available() and self.buf.peek(peek_width)[-1] == 0x47:
+            self.buf.skip(peek_width)
             index += 1
 
             temp = self.buf.ru16()
@@ -3400,6 +3405,7 @@ class MpegTsModule(module.RuminantModule):
 
             if pid not in slack:
                 slack[pid] = b""
+                starts[pid] = index
 
             if pusi:
                 if self.buf.peek(3) == b"\x00\x00\x01":
@@ -3419,7 +3425,9 @@ class MpegTsModule(module.RuminantModule):
             else:
                 slack[pid] += self.buf.read(left)
 
-            if self.buf.peek(1) != b"\x47" and self.buf.available() > 16 and self.buf.peek(17)[-1] == b"\x47":
+            if self.buf.available() and (
+                self.buf.peek(peek_width)[-1] != 0x47 and self.buf.available() > 16 and self.buf.peek(17)[-1] == b"\x47"
+            ):
                 self.buf.skip(16)
 
         for key, value in slack.items():

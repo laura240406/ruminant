@@ -115,7 +115,7 @@ Ruminant is still in early alpha but it can already process the following file t
   * MP4/MOV/HEIC/HEIF/AVIF/JPEG2000
 * EBML/Matroska/MKV/WebM
 * Ogg/Ogv
-* MPEG-TS
+* MPEG-TS/M2TS
 * ASF/WMA/WMV
 * Duck IVF
 * Dirac data units
@@ -135,7 +135,7 @@ Ruminant can extract and parse data units of specific codecs from specific conta
 
 empty means the container doesn't support it
 
-|Codec|MP4|MKV|MPEG-TS|Duck IVF|HEIF|MPEG-PS|AVI|
+|Codec|MP4|MKV|MPEG-TS/M2TS|Duck IVF|HEIF|MPEG-PS|AVI|
 |-|-|-|-|-|-|-|-|
 |MPEG-2|🚧|🚧|🚧|||🚧|🚧|
 |H.264|✅|✅|✅||✅|✅|✅|
