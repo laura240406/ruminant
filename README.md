@@ -157,6 +157,7 @@ empty means the container doesn't support it
 |METT|✅||||||
 |DVBSUB||✅|✅||||
 |Teletext|||✅||||
+|Presentation Graphic Stream||✅|||||
 
 # How do I install it?
 Run `pip3 install ruminant\[full\]` if you want C acceleration or `pip3 install ruminant` if you want pure Python.

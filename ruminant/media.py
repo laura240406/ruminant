@@ -3146,6 +3146,101 @@ class FFMpreg(object):
 
         return packet
 
+    @staticmethod
+    def read_pgs_packet(buf: Buf) -> dict:
+        packet = {}
+        packet["type"] = utils.unraw(
+            buf.ru8(),
+            1,
+            {
+                0x14: "Palette Definition Segment",
+                0x15: "Object Definition Segment",
+                0x16: "Presentation Composition Segment",
+                0x17: "Window Definition Segment",
+                0x80: "End of Display Set Segment",
+            },
+            True,
+        )
+        packet["length"] = buf.ru16()
+
+        buf.pasunit(packet["length"])
+
+        match packet["type"]:
+            case "Presentation Composition Segment":
+                packet["width"] = buf.ru16()
+                packet["height"] = buf.ru16()
+                packet["frame-rate"] = buf.ru8()
+                packet["composition-number"] = buf.ru16()
+                packet["composition-state"] = utils.unraw(
+                    buf.ru8(), 1, {0x00: "Normal", 0x40: "Acquisition Point", 0x80: "Epoch Start"}, True
+                )
+                packet["palette-update"] = utils.unraw(
+                    buf.ru8(), 1, {0x00: "Normal composition", 0x80: "Palette only update"}, True
+                )
+                packet["palette-id"] = buf.ru8()
+                packet["object-count"] = buf.ru8()
+
+                packet["objects"] = []
+                for i in range(0, packet["object-count"]):
+                    obj: dict = {}
+                    obj["id"] = buf.ru16()
+                    obj["window-id"] = buf.ru8()
+                    obj["flags"] = utils.unpack_flags(buf.ru8(), ((0, "force-crop-present"),))
+                    obj["x-pos"] = buf.ru16()
+                    obj["y-pos"] = buf.ru16()
+
+                    if "force-crop-present" in obj["flags"]["names"]:
+                        obj["crop-x-pos"] = buf.ru16()
+                        obj["crop-y-pos"] = buf.ru16()
+                        obj["crop-width"] = buf.ru16()
+                        obj["crop-height"] = buf.ru16()
+
+                    packet["objects"].append(obj)
+            case "Window Definition Segment":
+                packet["window-count"] = buf.ru8()
+
+                packet["windows"] = []
+                for i in range(0, packet["window-count"]):
+                    window = {}
+                    window["id"] = buf.ru8()
+                    window["x"] = buf.ru16()
+                    window["y"] = buf.ru16()
+                    window["width"] = buf.ru16()
+                    window["height"] = buf.ru16()
+
+                    packet["windows"].append(window)
+            case "Palette Definition Segment":
+                packet["palette-id"] = buf.ru8()
+                packet["palette-version"] = buf.ru8()
+
+                packet["entries"] = []
+                while buf.hasunit():
+                    packet["entries"].append({
+                        "palette-entry-id": buf.ru8(),
+                        "y": buf.ru8(),
+                        "cb": buf.ru8(),
+                        "cr": buf.ru8(),
+                        "alpha": buf.ru8(),
+                    })
+            case "Object Definition Segment":
+                packet["object-id"] = buf.ru16()
+                packet["object-version"] = buf.ru8()
+                packet["flags"] = utils.unpack_flags(buf.ru8(), ((7, "first"), (6, "last")))
+
+                if "first" in packet["flags"]["names"]:
+                    packet["object-data-length"] = buf.ru24()
+                    packet["object-width"] = buf.ru16()
+                    packet["object-height"] = buf.ru16()
+            case "End of Display Set Segment":
+                pass
+            case _:
+                packet["payload"] = buf.rh(buf.unit)
+                packet["unknown"] = True
+
+        buf.sapunit()
+
+        return packet
+
     # BOOK New FFMpreg method
 
 
