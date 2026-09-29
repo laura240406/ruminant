@@ -157,7 +157,7 @@ empty means the container doesn't support it
 |METT|✅||||||
 |DVBSUB||✅|✅||||
 |Teletext|||✅||||
-|Presentation Graphic Stream||✅|||||
+|Presentation Graphic Stream||✅|✅||||
 |DTS|✅|✅|✅||||✅|
 
 # How do I install it?
