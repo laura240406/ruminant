@@ -1753,6 +1753,9 @@ class IsoModule(module.RuminantModule):
                                 mode = "mpeg2"
                             case "Audio ISO/IEC 14496-3 g":
                                 mode = "aac"
+                            case _:
+                                if desc["value"]["object-type-indictation"].startswith("DTS"):
+                                    mode = "dts"
 
                         for child in desc["value"]["children"]:
                             if child["tag"] == "DecoderSpecificInfo":
@@ -1796,6 +1799,11 @@ class IsoModule(module.RuminantModule):
                                     data["samples"][index].append(FFMpreg.read_mpeg2_packet(self.buf))
 
                                     self.buf.sapunit()
+                            case "dts":
+                                data["samples"][index] = []
+
+                                while self.buf.available():
+                                    data["samples"][index].append(FFMpreg.read_dts_frame(self.buf))
                             case _:
                                 data["samples"][index] = chew(self.buf, blob_mode=True)
             # BOOK New MP4 handler
@@ -1905,6 +1913,11 @@ class IsoModule(module.RuminantModule):
                         0x6b: "Audio ISO/IEC 11172-3",
                         0x6c: "Visual ISO/IEC 10918-1",
                         0x6e: "Visual ISO/IEC 15444-1",
+                        0xa9: "DTS Coherent Acoustics (DTS Core / Legacy DTS)",
+                        0xaa: "DTS-HD High Resolution Audio (DTS-HD HR)",
+                        0xab: "DTS-HD Master Audio (DTS-HD MA)",
+                        0xac: "DTS Express (Low Bit Rate / LBR)",
+                        0xad: "DTS-UHD / DTS:X Profile 2",
                     },
                     True,
                 )
@@ -2928,6 +2941,18 @@ class MatroskaModule(module.RuminantModule):
                             stream["samples"][index].append(FFMpreg.read_pgs_packet(self.buf))
 
                         self.buf.sapunit()
+                case "A_DTS":
+                    stream["samples"] = {}
+
+                    for index in ranges:
+                        self.buf.seek(sample_offsets[stream["id"]][index])
+                        self.buf.pasunit(sample_sizes[stream["id"]][index])
+
+                        stream["samples"][index] = []
+                        while self.buf.hasunit():
+                            stream["samples"][index].append(FFMpreg.read_dts_frame(self.buf))
+
+                        self.buf.sapunit()
                 # BOOK New MKV handler
                 case _:
                     if stream["id"] in codec_privates:
@@ -3362,6 +3387,7 @@ class MpegTsModule(module.RuminantModule):
                                 36: "H.265 video",
                                 51: "H.266 video",
                                 129: "AC-3 audio",
+                                130: "DTS audio",
                                 144: "Presentation Graphics stream",
                                 209: "Dirac video",
                             },
@@ -3642,6 +3668,10 @@ class MpegTsModule(module.RuminantModule):
                         sample["packets"] = []
                         while buf.hasunit():
                             sample["packets"].append(FFMpreg.read_pgs_packet(buf))
+                    case 130:
+                        sample["frames"] = []
+                        while buf.hasunit():
+                            sample["frames"].append(FFMpreg.read_dts_frame(buf))
                     case _:
                         mode = None
                         for desc in self.es[pid][1]["descriptors"]:
@@ -3681,7 +3711,7 @@ class MpegTsModule(module.RuminantModule):
                                 while buf.hasunit():
                                     sample["packets"].append(FFMpreg.read_teletext_packet(buf))
                             case _:
-                                sample["blob"] = chew(ess[index]["blob"])
+                                sample["blob"] = chew(buf)
                                 meta["streams"][pid]["unknown"] = True
 
                 meta["streams"][pid]["samples"][index] = sample

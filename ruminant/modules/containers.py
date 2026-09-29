@@ -725,6 +725,10 @@ class RIFFModule(module.RuminantModule):
                         sample = []
                         while self.buf.hasunit():
                             sample.append(FFMpreg.read_dirac_packet(self.buf))
+                    case "DTS":
+                        sample = []
+                        while self.buf.hasunit():
+                            sample.append(FFMpreg.read_dts_frame(self.buf))
                     case _:
                         with self.buf.subunit():
                             sample = {"blob": chew(self.buf, blob_mode=True), "unknown": True}

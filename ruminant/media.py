@@ -3242,6 +3242,101 @@ class FFMpreg(object):
 
         return packet
 
+    @staticmethod
+    def read_dts_frame(buf: Buf) -> dict:
+        frame: dict = {}
+
+        assert buf.ru32() == 0x7ffe8001
+        frame["ftype"] = ("Normal", "Termination")[buf.rb(1)]
+        frame["short"] = buf.rb(5)
+        frame["crc-present"] = buf.rb(1)
+        frame["nblks"] = buf.rb(7)
+        frame["fsize"] = buf.rb(14)
+        frame["amode"] = utils.unraw(buf.rb(6), 1, {0x00: "Mono", 0x02: "Stereo", 0x09: "5.1"}, True)
+        frame["sfreq"] = [
+            None,
+            8000,
+            16000,
+            32000,
+            None,
+            None,
+            44100,
+            48000,
+            88200,
+            96000,
+            176400,
+            192000,
+            None,
+            None,
+            None,
+            None,
+        ][buf.rb(4)]
+        frame["rate"] = [
+            32000,
+            56000,
+            64000,
+            96000,
+            112000,
+            128000,
+            192000,
+            224000,
+            256000,
+            320000,
+            384000,
+            448000,
+            512000,
+            576000,
+            640000,
+            768000,
+            960000,
+            1024000,
+            1152000,
+            1280000,
+            1344000,
+            1408000,
+            1411200,
+            1472000,
+            1536000,
+            1920000,
+            2048000,
+            3072000,
+            3840000,
+            "open",
+            "lossless",
+            None,
+        ][buf.rb(5)]
+        frame["mix"] = buf.rb(1)
+        frame["dynf"] = buf.rb(1)
+        frame["timef"] = buf.rb(1)
+        frame["auxf"] = buf.rb(1)
+        frame["hdcd"] = buf.rb(1)
+        frame["ext-audio-id"] = buf.rb(3)
+        frame["ext-audio"] = buf.rb(1)
+        frame["aspf"] = buf.rb(1)
+        frame["lfe"] = buf.rb(2)
+        frame["hights"] = buf.rb(1)
+
+        if frame["crc-present"]:
+            frame["crc"] = buf.pu16()
+
+        buf.skip(frame["fsize"] - 10)
+
+        if buf.available() > 4 and buf.pu32() in (0x64582025, 0x47002025):
+            base = buf.tell()
+
+            frame["substream"] = {}
+            frame["substream"]["type"] = utils.unraw(
+                buf.ru32(), 4, {0x64582025: "DTS-HD", 0x47002025: "DTS Express / LBR"}, True
+            )
+            frame["substream"]["wide"] = buf.rb(1)
+            frame["substream"]["header-size"] = buf.rb(12 if frame["substream"]["wide"] else 8)
+            frame["substream"]["size"] = buf.rb(20 if frame["substream"]["wide"] else 16)
+
+            buf.align()
+            buf.skip(buf.tell() - base + frame["substream"]["size"] + 1)
+
+        return frame
+
     # BOOK New FFMpreg method
 
 
