@@ -3234,6 +3234,18 @@ class MpegTsModule(module.RuminantModule):
                             desc["data"]["type"] = f"Unknown (0x{hex(typ)[2:].zfill(2)})"
                             desc["data"]["payload"] = buf.rh(buf.unit)
                             desc["unknown"] = True
+                case 0x88:
+                    desc["type"] = "Copy Control Descriptor"
+                    desc["data"]["reserved0"] = buf.ru16()
+                    desc["data"]["reserved1"] = buf.rb(6)
+                    desc["data"]["cgms"] = utils.unraw(
+                        buf.rb(2), 1, {0b00: "Copy Free", 0b01: "Copy No More", 0b10: "Copy Once", 0b11: "Copy Never"}, True
+                    )
+                    desc["data"]["reserved2"] = buf.rb(6)
+                    desc["data"]["aps"] = utils.unraw(
+                        buf.rb(2), 1, {0b00: "Off", 0b01: "Type 1", 0b10: "Type 2", 0b11: "Type 3"}, True
+                    )
+
                 # BOOK New MPEG-TS descriptor
                 case _:
                     desc["payload"] = buf.rh(buf.unit)
@@ -3349,6 +3361,8 @@ class MpegTsModule(module.RuminantModule):
                                 27: "H.264 video",
                                 36: "H.265 video",
                                 51: "H.266 video",
+                                129: "AC-3 audio",
+                                144: "Presentation Graphics stream",
                                 209: "Dirac video",
                             },
                             True,
@@ -3387,6 +3401,9 @@ class MpegTsModule(module.RuminantModule):
         starts: dict = {}
 
         peek_width = 5 if self.buf.peek(5)[4] == 0x47 else 1
+
+        if peek_width == 5:
+            meta["type"] = "m2ts"
 
         index = 0
         while self.buf.available() and self.buf.peek(peek_width)[-1] == 0x47:
@@ -3576,43 +3593,6 @@ class MpegTsModule(module.RuminantModule):
                             sample["nalus"].append(FFMpreg.read_h264_nalu(buf))
 
                             buf.sapunit()
-                    case 6:
-                        mode = None
-                        for desc in self.es[pid][1]["descriptors"]:
-                            match desc.get("type"):
-                                case "Subtiltling Descriptor":
-                                    mode = "sub"
-                                case "AC-3 Descriptor":
-                                    mode = "ac-3"
-
-                        if (
-                            mode is None
-                            and ess[index]["header"]["steam-id"] == "Private stream 1"
-                            and buf.pu24() & 0xf0ffff in (0x10022c, 0x10032c, 0x10ff2c)
-                        ):
-                            mode = "teletext"
-
-                        match mode:
-                            case "sub":
-                                sample["data-identifier"] = buf.ru8()
-                                sample["subtitle-stream-id"] = buf.ru8()
-
-                                sample["packets"] = []
-                                while buf.hasunit(4):
-                                    sample["packets"].append(FFMpreg.read_dvbsub_packet(buf))
-                            case "ac-3":
-                                sample["frames"] = []
-                                while buf.hasunit():
-                                    sample["frames"].append(FFMpreg.read_ac3_frame(buf))
-                            case "teletext":
-                                sample["data-identifier"] = buf.ru8()
-
-                                sample["packets"] = []
-                                while buf.hasunit():
-                                    sample["packets"].append(FFMpreg.read_teletext_packet(buf))
-                            case _:
-                                sample["blob"] = chew(ess[index]["blob"])
-                                meta["streams"][pid]["unknown"] = True
                     case 3:
                         sample["frames"] = []
                         while buf.hasunit():
@@ -3658,9 +3638,51 @@ class MpegTsModule(module.RuminantModule):
                             sample["nalus"].append(FFMpreg.read_h266_nalu(buf))
 
                             buf.sapunit()
+                    case 144:
+                        sample["packets"] = []
+                        while buf.hasunit():
+                            sample["packets"].append(FFMpreg.read_pgs_packet(buf))
                     case _:
-                        sample["blob"] = chew(buf, blob_mode=True)
-                        meta["streams"][pid]["unknown"] = True
+                        mode = None
+                        for desc in self.es[pid][1]["descriptors"]:
+                            match desc.get("type"):
+                                case "Subtiltling Descriptor":
+                                    mode = "sub"
+                                case "AC-3 Descriptor":
+                                    mode = "ac-3"
+                                case "Registration Descriptor":
+                                    match desc.get("data", {}).get("type"):
+                                        case "AC-3":
+                                            mode = "ac-3"
+
+                        if (
+                            mode is None
+                            and ess[index]["header"]["steam-id"] == "Private stream 1"
+                            and buf.pu24() & 0xf0ffff in (0x10022c, 0x10032c, 0x10ff2c)
+                        ):
+                            mode = "teletext"
+
+                        match mode:
+                            case "sub":
+                                sample["data-identifier"] = buf.ru8()
+                                sample["subtitle-stream-id"] = buf.ru8()
+
+                                sample["packets"] = []
+                                while buf.hasunit(4):
+                                    sample["packets"].append(FFMpreg.read_dvbsub_packet(buf))
+                            case "ac-3":
+                                sample["frames"] = []
+                                while buf.hasunit():
+                                    sample["frames"].append(FFMpreg.read_ac3_frame(buf))
+                            case "teletext":
+                                sample["data-identifier"] = buf.ru8()
+
+                                sample["packets"] = []
+                                while buf.hasunit():
+                                    sample["packets"].append(FFMpreg.read_teletext_packet(buf))
+                            case _:
+                                sample["blob"] = chew(ess[index]["blob"])
+                                meta["streams"][pid]["unknown"] = True
 
                 meta["streams"][pid]["samples"][index] = sample
 

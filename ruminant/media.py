@@ -1181,6 +1181,7 @@ class FFMpreg(object):
                             0x00: "buffering_period",
                             0x04: "user_data_registered_itu_t_t35",
                             0x05: "user_data_unregistered",
+                            0x80: "structure_of_picture_info",
                             0x89: "mastering_display_colour_volume",
                             0x90: "content_light_level_info",
                         },
