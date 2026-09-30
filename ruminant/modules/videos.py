@@ -3692,6 +3692,9 @@ class MpegTsModule(module.RuminantModule):
                         ):
                             mode = "teletext"
 
+                        if mode is None and self.es[pid][0] == 0x81:
+                            mode = "ac-3"
+
                         match mode:
                             case "sub":
                                 sample["data-identifier"] = buf.ru8()
