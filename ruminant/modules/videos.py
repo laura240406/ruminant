@@ -3197,12 +3197,26 @@ class MpegTsModule(module.RuminantModule):
                         },
                         True,
                     )
+                case 0x0e:
+                    desc["type"] = "Maximum Bitrate Descriptor"
+                    desc["reserved"] = buf.rb(2)
+                    desc["bytes-per-second"] = buf.rb(22) * 50
                 case 0x25 | 0x26:
                     if buf.peek(2) == b"\xff\xff":
-                        desc["type"] = "ID3"
+                        desc["type"] = "ID3 Descriptor"
                     else:
                         desc["payload"] = buf.rh(buf.unit)
                         desc["unknown"] = True
+                case 0x28:
+                    desc["type"] = "AVC Video Descriptor"
+                    desc["profile-idc"] = buf.ru8()
+                    desc["constraints"] = [buf.rb(1) for _ in range(0, 6)]
+                    desc["compatible-flags"] = buf.rb(2)
+                    desc["level-idc"] = buf.ru8()
+                    desc["still-present"] = buf.rb(1)
+                    desc["24-hour-picture-flag"] = buf.rb(1)
+                    desc["frame-packing-sei-not-present-flag"] = buf.rb(1)
+                    desc["reserved"] = buf.rb(5)
                 case 0x6a:
                     desc["type"] = "AC-3 Descriptor"
                     desc["data"]["component-type-flag"] = buf.rb(1)

@@ -808,7 +808,7 @@ class FFMpreg(object):
                                 nal["libx264-banner"] = buf.rs(buf.unit)
                             case "59948b28-11ec-45af-9675-19d41feaa94d":
                                 nal["h264-vaapi-banner"] = buf.rs(buf.unit)
-                            case "a4dcf53f-130a-291c-9bd6-1ac002e6bdab":
+                            case "a4dcf53f-130a-291c-9bd6-1ac002e6bdab" | "8fbb6c74-7c3e-4f78-9f07-8cb35d3c177e":
                                 nal["string"] = buf.rs(buf.unit)
                             case _:
                                 nal["payload"] = buf.rh(buf.unit)
