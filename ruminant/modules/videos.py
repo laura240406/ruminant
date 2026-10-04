@@ -3209,7 +3209,12 @@ class MpegTsModule(module.RuminantModule):
                         desc["unknown"] = True
                 case 0x28:
                     desc["type"] = "AVC Video Descriptor"
-                    desc["profile-idc"] = buf.ru8()
+                    desc["profile-idc"] = utils.unraw(
+                        buf.ru8(),
+                        1,
+                        FFMpreg.H264_PROFILES,
+                        True,
+                    )
                     desc["constraints"] = [buf.rb(1) for _ in range(0, 6)]
                     desc["compatible-flags"] = buf.rb(2)
                     desc["level-idc"] = buf.ru8()

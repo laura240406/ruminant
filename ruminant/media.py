@@ -41,6 +41,16 @@ class FFMpreg(object):
         0x1e: "Unspecified 30",
         0x1f: "Unspecified 31",
     }
+    H264_PROFILES = {
+        44: "CAVLC 4:4:4 Intra",
+        66: "Baseline",
+        77: "Main",
+        88: "Extended",
+        100: "High",
+        110: "High 10",
+        122: "High 4:2:2",
+        244: "High 4:4:4",
+    }
     H265_NAL_UNIT_TYPES = {
         0x00: "TRAIL_N",
         0x01: "TRAIL_R",
@@ -277,16 +287,7 @@ class FFMpreg(object):
                 nal["profile-idc"] = utils.unraw(
                     profile_idc,
                     1,
-                    {
-                        44: "CAVLC 4:4:4 Intra",
-                        66: "Baseline",
-                        77: "Main",
-                        88: "Extended",
-                        100: "High",
-                        110: "High 10",
-                        122: "High 4:2:2",
-                        244: "High 4:4:4",
-                    },
+                    FFMpreg.H264_PROFILES,
                     True,
                 )
                 nal["constraint-set-flags"] = [buf.rb(1) for i in range(0, 6)]
