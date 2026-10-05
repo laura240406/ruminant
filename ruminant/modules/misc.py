@@ -2095,3 +2095,87 @@ class MindustrySchematicModule(module.RuminantModule):
             meta["tiles"].append(tile)
 
         return meta
+
+
+@module.register
+class GlTFSchematicModule(module.RuminantModule):
+    desc = "glTF files."
+
+    @staticmethod
+    def identify(buf: Buf, ctx={}) -> bool:
+        return buf.peek(4) == b"glTF"
+
+    def chew(self) -> ruminant_types.JSON:
+        meta: dict = {}
+        meta["type"] = "gltf"
+
+        self.buf.skip(4)
+        meta["version"] = self.buf.ru32l()
+
+        self.buf.pasunit(self.buf.ru32l() - 12)
+
+        buffer_id = 0
+        buffers: list[bytes] = []
+        meta["chunks"] = []
+        while self.buf.hasunit():
+            chunk = {}
+            chunk["offset"] = self.buf.tell()
+            chunk["length"] = self.buf.ru32l()
+            chunk["type"] = self.buf.rs(4)
+
+            self.buf.pasunit(chunk["length"])
+
+            match chunk["type"]:
+                case "JSON":
+                    chunk["json"] = json.loads(self.buf.rs(self.buf.unit))
+                case "BIN":
+                    chunk["buffer-id"] = buffer_id
+                    buffers.append(self.buf.peek(self.buf.unit))
+                    buffer_id += 1
+                    with self.buf.subunit():
+                        chunk["blob"] = chew(self.buf, blob_mode=True)
+                case _:
+                    with self.buf.subunit():
+                        chunk["blob"] = chew(self.buf, blob_mode=True)
+
+                    chunk["unknown"] = True
+
+            self.buf.sapunit()
+
+            meta["chunks"].append(chunk)
+
+        self.buf.sapunit()
+
+        try:
+            with self.buf:
+                root = None
+                for chunk in meta["chunks"]:
+                    if chunk["type"] == "JSON":
+                        root = chunk["json"]
+                        break
+
+                assert root is not None
+
+                buffer_views = []
+                for buffer_view_config in root["bufferViews"]:
+                    buffer_views.append(
+                        buffers[buffer_view_config["buffer"]][
+                            buffer_view_config["byteOffset"] : buffer_view_config["byteOffset"]
+                            + buffer_view_config["byteLength"]
+                        ]
+                    )
+
+                meta["buffer-views"] = [chew(Buf(blob), blob_mode=True) for blob in buffer_views]
+
+                if "images" in root:
+                    meta["images"] = []
+                    for image_config in root["images"]:
+                        meta["images"].append(chew(Buf(buffer_views[image_config["bufferView"]])))
+
+        except Exception as e:
+            if module.debug:
+                raise e
+
+            pass
+
+        return meta
