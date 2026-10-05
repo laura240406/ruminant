@@ -1180,6 +1180,7 @@ class FFMpreg(object):
                         1,
                         {
                             0x00: "buffering_period",
+                            0x01: "pic_timing",
                             0x04: "user_data_registered_itu_t_t35",
                             0x05: "user_data_unregistered",
                             0x80: "structure_of_picture_info",
