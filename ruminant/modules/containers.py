@@ -729,6 +729,16 @@ class RIFFModule(module.RuminantModule):
                         sample = []
                         while self.buf.hasunit():
                             sample.append(FFMpreg.read_dts_frame(self.buf))
+                    case "avc1":
+                        sample = []
+
+                        while self.buf.hasunit():
+                            self.buf.pasunit(self.buf.ru32())
+
+                            sample.append(FFMpreg.read_h264_nalu(self.buf))
+
+                            self.buf.sapunit()
+                    # BOOK New AVI codec
                     case _:
                         with self.buf.subunit():
                             sample = {"blob": chew(self.buf, blob_mode=True), "unknown": True}
