@@ -2450,6 +2450,16 @@ class FFMpreg(object):
         if frame["protection"] == 0:
             frame["crc"] = buf.ru16()
 
+        if buf.rb(3) == 0b110:
+            count = buf.rb(4)
+
+            if buf.rb(4) == 0b0000:
+                buf.rb(5)
+                buf.skip(1)
+                frame["version-string"] = buf.rs(count - 1)
+
+        buf.align()
+
         buf.sapunit()
 
         return frame
