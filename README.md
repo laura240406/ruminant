@@ -160,6 +160,7 @@ empty means the container doesn't support it
 |Teletext|||✅||||
 |Presentation Graphic Stream||✅|✅||||
 |DTS|✅|✅|✅||||✅|
+|VP9|🚧||||||
 
 # How do I install it?
 Run `pip3 install ruminant\[full\]` if you want C acceleration or `pip3 install ruminant` if you want pure Python.

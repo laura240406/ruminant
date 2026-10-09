@@ -1806,6 +1806,17 @@ class IsoModule(module.RuminantModule):
                                     data["samples"][index].append(FFMpreg.read_dts_frame(self.buf))
                             case _:
                                 data["samples"][index] = chew(self.buf, blob_mode=True)
+            case "vp09":
+                ranges = utils.expand_ranges(secrets.get_parameter("0", data, "ranges"), 0, len(sample_to_offset) - 1)
+                data["samples"] = {}
+
+                for index in ranges:
+                    self.buf.seek(sample_to_offset[index])
+                    self.buf.pasunit(sample_sizes[index])
+
+                    data["samples"][index] = FFMpreg.read_vp9_packet(self.buf)
+
+                    self.buf.sapunit()
             # BOOK New MP4 handler
             case _:
                 ranges = utils.expand_ranges(secrets.get_parameter("0", data, "ranges"), 0, len(sample_to_offset) - 1)

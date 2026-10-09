@@ -3349,6 +3349,133 @@ class FFMpreg(object):
 
         return frame
 
+    @staticmethod
+    def read_vp9_color_config(buf: Buf, packet: dict) -> None:
+        packet["color-space"] = utils.unraw(
+            buf.rb(3),
+            1,
+            {
+                0b000: "UNKNOWN",
+                0b001: "BT_601",
+                0b010: "BT_709",
+                0b011: "SMPTE_170",
+                0b100: "SMPTE_240",
+                0b101: "BT_2020",
+                0b110: "RESERVED",
+                0b111: "RGB",
+            },
+            True,
+        )
+        if packet["color-space"] != "RGB":
+            packet["color-range"] = buf.rb(1)
+
+            if packet["profile"] in (1, 3):
+                packet["subsampling-x"] = buf.rb(1)
+                packet["subsampling-y"] = buf.rb(1)
+                packet["reserved-zero"] = buf.rb(1)
+        else:
+            if packet["profile"] in (1, 3):
+                packet["reserved-zero"] = buf.rb(1)
+
+    @staticmethod
+    def read_vp9_frame_size(buf: Buf, packet: dict) -> None:
+        packet["frame-width"] = buf.rb(16) + 1
+        packet["frame-height"] = buf.rb(16) + 1
+
+    @staticmethod
+    def read_vp9_render_size(buf: Buf, packet: dict) -> None:
+        packet["render-and-frame-size-different"] = buf.rb(1)
+        if packet["render-and-frame-size-different"]:
+            packet["render-width"] = buf.rb(16) + 1
+            packet["render-height"] = buf.rb(16) + 1
+
+    @staticmethod
+    def read_single_vp9_packet(buf: Buf) -> dict:
+        packet = {}
+
+        assert buf.rb(2) == 0b10
+        packet["profile"] = [0, 2, 1, 3][buf.rb(2)]
+        if packet["profile"] == 3:
+            packet["reserved"] = buf.rb(1)
+        packet["show-existing-frame"] = buf.rb(1)
+        if packet["show-existing-frame"]:
+            packet["frame-to-show-map-idx"] = buf.rb(3)
+        packet["inter-frame"] = buf.rb(1)
+        packet["show-frame"] = buf.rb(1)
+        packet["error-resilient-mode"] = buf.rb(1)
+
+        if not packet["inter-frame"]:
+            assert buf.rb(24) == 0x498342
+            if packet["profile"] >= 2:
+                packet["ten-or-twelve-bit"] = buf.rb(1)
+            FFMpreg.read_vp9_color_config(buf, packet)
+            FFMpreg.read_vp9_frame_size(buf, packet)
+            FFMpreg.read_vp9_render_size(buf, packet)
+        else:
+            if packet["show-frame"] == 0:
+                packet["intra-only"] = buf.rb(1)
+            if packet["error-resilient-mode"] == 0:
+                packet["reset-frame-context"] = buf.rb(1)
+            if packet.get("intra-only"):
+                assert buf.rb(24) == 0x498342
+                if packet["profile"] > 0:
+                    FFMpreg.read_vp9_color_config(buf, packet)
+                packet["refresh-frame-flags"] = buf.rb(8)
+                FFMpreg.read_vp9_frame_size(buf, packet)
+                FFMpreg.read_vp9_render_size(buf, packet)
+            else:
+                packet["refresh-frame-flags"] = buf.rb(8)
+                packet["ref-frame-idx-and-sign-bias"] = [[buf.rb(3), buf.rb(1)] for _ in range(0, 3)]
+                packet["found-ref"] = [buf.rb(1) for _ in range(0, 3)]
+                if sum(packet["found-ref"]) == 0:
+                    FFMpreg.read_vp9_frame_size(buf, packet)
+                FFMpreg.read_vp9_render_size(buf, packet)
+                packet["allow-high-precision-mv"] = buf.rb(1)
+                packet["is-filter-switchable"] = buf.rb(1)
+                if packet["is-filter-switchable"] == 0:
+                    packet["raw-interpolation-filter"] = buf.rb(2)
+            if packet["error-resilient-mode"] == 0:
+                packet["refresh-frame-context"] = buf.rb(1)
+                packet["frame-parallel-decoding-mode"] = buf.rb(1)
+            packet["frame-context-idx"] = buf.rb(2)
+            # continue at if ( FrameIsIntra || error_resilient_mode ) {
+            # in https://storage.googleapis.com/downloads.webmproject.org/docs/vp9/vp9-bitstream-specification-v0.7-20170222-draft.pdf
+
+        return packet
+
+    @staticmethod
+    def read_vp9_packet(buf: Buf) -> list[dict] | dict:
+        payload = buf.readunit()
+        if not payload:
+            return {}
+
+        last_byte = payload[-1]
+
+        if (last_byte & 0xe0) == 0xc0:
+            bytes_per_size = ((last_byte >> 3) & 0x03) + 1
+            frame_count = (last_byte & 0x07) + 1
+            trailer_len = 2 + (bytes_per_size * frame_count)
+
+            if len(payload) >= trailer_len and payload[-trailer_len] == last_byte:
+                size_start = len(payload) - 1 - (bytes_per_size * frame_count)
+
+                frame_sizes = []
+                for i in range(frame_count):
+                    entry_start = size_start + (i * bytes_per_size)
+                    entry_bytes = payload[entry_start : entry_start + bytes_per_size]
+                    frame_sizes.append(int.from_bytes(entry_bytes, "little"))
+
+                frames = []
+                offset = 0
+                for sz in frame_sizes:
+                    frame_data = payload[offset : offset + sz]
+                    frames.append(FFMpreg.read_single_vp9_packet(Buf(frame_data)))
+                    offset += sz
+
+                return frames
+
+        return FFMpreg.read_single_vp9_packet(Buf(payload))
+
     # BOOK New FFMpreg method
 
 
