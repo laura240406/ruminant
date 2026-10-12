@@ -2964,7 +2964,7 @@ class MatroskaModule(module.RuminantModule):
                             stream["samples"][index].append(FFMpreg.read_dts_frame(self.buf))
 
                         self.buf.sapunit()
-                case "V_VP9 ":
+                case "V_VP9":
                     stream["samples"] = {}
 
                     for index in ranges:
