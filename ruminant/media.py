@@ -3429,7 +3429,7 @@ class FFMpreg(object):
                 packet["found-ref"] = [buf.rb(1) for _ in range(0, 3)]
                 if sum(packet["found-ref"]) == 0:
                     FFMpreg.read_vp9_frame_size(buf, packet)
-                FFMpreg.read_vp9_render_size(buf, packet)
+                    FFMpreg.read_vp9_render_size(buf, packet)
                 packet["allow-high-precision-mv"] = buf.rb(1)
                 packet["is-filter-switchable"] = buf.rb(1)
                 if packet["is-filter-switchable"] == 0:
@@ -3438,7 +3438,29 @@ class FFMpreg(object):
                 packet["refresh-frame-context"] = buf.rb(1)
                 packet["frame-parallel-decoding-mode"] = buf.rb(1)
             packet["frame-context-idx"] = buf.rb(2)
-            # continue at if ( FrameIsIntra || error_resilient_mode ) {
+            packet["loop-filter-level"] = buf.rb(6)
+            packet["loop-filter-sharpness"] = buf.rb(3)
+            packet["loop-filter-delta-enabled"] = buf.rb(1)
+            if packet["loop-filter-delta-enabled"]:
+                packet["loop-filter-delta-update"] = buf.rb(1)
+                if packet["loop-filter-delta-update"] == 1:
+                    packet["ref-delta"] = []
+                    for i in range(0, 4):
+                        if buf.rb(1):
+                            packet["ref-delta"].append(buf.rsb(6))
+                        else:
+                            packet["ref-delta"].append(None)
+                    packet["mode-delta"] = []
+                    for i in range(0, 2):
+                        if buf.rb(1):
+                            packet["mode-delta"].append(buf.rsb(6))
+                        else:
+                            packet["mode-delta"].append(None)
+            packet["base-q-idx"] = buf.rb(8)
+            packet["delta-q-y-dc"] = buf.rsb(4) if buf.rb(1) else None
+            packet["delta-q-uv-dc"] = buf.rsb(4) if buf.rb(1) else None
+            packet["delta-q-uv-ac"] = buf.rsb(4) if buf.rb(1) else None
+            # continue at segmentation_params()
             # in https://storage.googleapis.com/downloads.webmproject.org/docs/vp9/vp9-bitstream-specification-v0.7-20170222-draft.pdf
 
         return packet
