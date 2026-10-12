@@ -738,6 +738,8 @@ class RIFFModule(module.RuminantModule):
                             sample.append(FFMpreg.read_h264_nalu(self.buf))
 
                             self.buf.sapunit()
+                    case "VP90":
+                        sample = FFMpreg.read_vp9_packet(self.buf)
                     # BOOK New AVI codec
                     case _:
                         with self.buf.subunit():
