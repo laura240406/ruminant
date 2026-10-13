@@ -3497,6 +3497,32 @@ class FFMpreg(object):
 
         return FFMpreg.read_single_vp9_packet(Buf(payload))
 
+    @staticmethod
+    def read_vp8_packet(buf: Buf) -> dict:
+        packet: dict = {}
+
+        if buf.unit == 0:
+            return {}
+
+        tag = buf.ru24()
+        packet["key-frame"] = bool(tag & 0x800000)
+        packet["version"] = (tag >> 20) & 0x07
+        packet["show-frame"] = bool(tag & 0x80000)
+        packet["first-partition-size"] = tag & 0x7ffff
+
+        if packet["key-frame"]:
+            assert buf.ru24() == 0x9d012a
+            packet["horizontal-scaling"] = ["1", "5/4", "5/3", "2"][buf.pu16l() >> 14]
+            packet["width"] = buf.ru16l() & 0x3fff
+            packet["vertical-scaling"] = ["1", "5/4", "5/3", "2"][buf.pu16l() >> 14]
+            packet["height"] = buf.ru16l() & 0x3fff
+            packet["color-space"] = ["YUV", "Reserved"][buf.rb(1)]
+            packet["value-clamping"] = buf.rb(1)
+
+        buf.align()
+
+        return packet
+
     # BOOK New FFMpreg method
 
 

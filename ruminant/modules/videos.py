@@ -2974,6 +2974,16 @@ class MatroskaModule(module.RuminantModule):
                         stream["samples"][index] = FFMpreg.read_vp9_packet(self.buf)
 
                         self.buf.sapunit()
+                case "V_VP8":
+                    stream["samples"] = {}
+
+                    for index in ranges:
+                        self.buf.seek(sample_offsets[stream["id"]][index])
+                        self.buf.pasunit(sample_sizes[stream["id"]][index])
+
+                        stream["samples"][index] = FFMpreg.read_vp8_packet(self.buf)
+
+                        self.buf.sapunit()
                 # BOOK New MKV handler
                 case _:
                     if stream["id"] in codec_privates:
@@ -4496,6 +4506,22 @@ class DuckIvfModule(module.RuminantModule):
                         self.buf.pasunit(length)
 
                         meta["samples"][i] = FFMpreg.read_vp9_packet(self.buf)
+
+                        self.buf.sapunit()
+                    else:
+                        self.buf.skip(length)
+            case "VP80":
+                ranges = utils.expand_ranges(secrets.get_parameter("0", meta, "ranges"), 0, meta["frame-count"] - 1) or []
+
+                meta["samples"] = {}
+                for i in range(0, meta["frame-count"]):
+                    length = self.buf.ru32l()
+                    self.buf.skip(8)
+
+                    if i in ranges:
+                        self.buf.pasunit(length)
+
+                        meta["samples"][i] = FFMpreg.read_vp8_packet(self.buf)
 
                         self.buf.sapunit()
                     else:

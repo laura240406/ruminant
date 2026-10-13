@@ -740,6 +740,8 @@ class RIFFModule(module.RuminantModule):
                             self.buf.sapunit()
                     case "VP90":
                         sample = FFMpreg.read_vp9_packet(self.buf)
+                    case "VP80":
+                        sample = FFMpreg.read_vp8_packet(self.buf)
                     # BOOK New AVI codec
                     case _:
                         with self.buf.subunit():
@@ -768,14 +770,7 @@ class RIFFModule(module.RuminantModule):
         chunk["data"] = {}
         match typ:
             case "VP8 ":
-                tag = self.buf.ru24()
-                chunk["data"]["keyframe"] = bool(tag & 0x800000)
-                chunk["data"]["version"] = (tag >> 20) & 0x07
-                chunk["data"]["show-frame"] = bool(tag & 0x80000)
-                chunk["data"]["partition-size"] = tag & 0x7ffff
-                chunk["data"]["start-code"] = self.buf.rh(3)
-                chunk["data"]["width"] = self.buf.ru16l() & 0x3fff
-                chunk["data"]["height"] = self.buf.ru16l() & 0x3fff
+                chunk["data"]["frame"] = FFMpreg.read_vp8_packet(self.buf)
             case "VP8L":
                 chunk["data"]["signature"] = self.buf.rh(1)
                 tag = self.buf.ru32l()
