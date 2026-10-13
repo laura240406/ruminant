@@ -3391,6 +3391,7 @@ class FFMpreg(object):
 
     @staticmethod
     def read_single_vp9_packet(buf: Buf) -> dict:
+        # https://storage.googleapis.com/downloads.webmproject.org/docs/vp9/vp9-bitstream-specification-v0.7-20170222-draft.pdf
         packet = {}
 
         assert buf.rb(2) == 0b10
@@ -3434,34 +3435,32 @@ class FFMpreg(object):
                 packet["is-filter-switchable"] = buf.rb(1)
                 if packet["is-filter-switchable"] == 0:
                     packet["raw-interpolation-filter"] = buf.rb(2)
-            if packet["error-resilient-mode"] == 0:
-                packet["refresh-frame-context"] = buf.rb(1)
-                packet["frame-parallel-decoding-mode"] = buf.rb(1)
-            packet["frame-context-idx"] = buf.rb(2)
-            packet["loop-filter-level"] = buf.rb(6)
-            packet["loop-filter-sharpness"] = buf.rb(3)
-            packet["loop-filter-delta-enabled"] = buf.rb(1)
-            if packet["loop-filter-delta-enabled"]:
-                packet["loop-filter-delta-update"] = buf.rb(1)
-                if packet["loop-filter-delta-update"] == 1:
-                    packet["ref-delta"] = []
-                    for i in range(0, 4):
-                        if buf.rb(1):
-                            packet["ref-delta"].append(buf.rsb(6))
-                        else:
-                            packet["ref-delta"].append(None)
-                    packet["mode-delta"] = []
-                    for i in range(0, 2):
-                        if buf.rb(1):
-                            packet["mode-delta"].append(buf.rsb(6))
-                        else:
-                            packet["mode-delta"].append(None)
-            packet["base-q-idx"] = buf.rb(8)
-            packet["delta-q-y-dc"] = buf.rsb(4) if buf.rb(1) else None
-            packet["delta-q-uv-dc"] = buf.rsb(4) if buf.rb(1) else None
-            packet["delta-q-uv-ac"] = buf.rsb(4) if buf.rb(1) else None
-            # continue at segmentation_params()
-            # in https://storage.googleapis.com/downloads.webmproject.org/docs/vp9/vp9-bitstream-specification-v0.7-20170222-draft.pdf
+        if packet["error-resilient-mode"] == 0:
+            packet["refresh-frame-context"] = buf.rb(1)
+            packet["frame-parallel-decoding-mode"] = buf.rb(1)
+        packet["frame-context-idx"] = buf.rb(2)
+        packet["loop-filter-level"] = buf.rb(6)
+        packet["loop-filter-sharpness"] = buf.rb(3)
+        packet["loop-filter-delta-enabled"] = buf.rb(1)
+        if packet["loop-filter-delta-enabled"]:
+            packet["loop-filter-delta-update"] = buf.rb(1)
+            if packet["loop-filter-delta-update"] == 1:
+                packet["ref-delta"] = []
+                for i in range(0, 4):
+                    if buf.rb(1):
+                        packet["ref-delta"].append(buf.rsb(6))
+                    else:
+                        packet["ref-delta"].append(None)
+                packet["mode-delta"] = []
+                for i in range(0, 2):
+                    if buf.rb(1):
+                        packet["mode-delta"].append(buf.rsb(6))
+                    else:
+                        packet["mode-delta"].append(None)
+        packet["base-q-idx"] = buf.rb(8)
+        packet["delta-q-y-dc"] = buf.rsb(4) if buf.rb(1) else None
+        packet["delta-q-uv-dc"] = buf.rsb(4) if buf.rb(1) else None
+        packet["delta-q-uv-ac"] = buf.rsb(4) if buf.rb(1) else None
 
         return packet
 
