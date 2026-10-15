@@ -460,6 +460,8 @@ class JavaClassModule(module.RuminantModule):
 
         tag = self.buf.read(1)
         match tag:
+            case b"\x10":
+                val["data"]["supertype-index"] = self.buf.ru16()
             case b"\x11" | b"\x12":
                 val["data"]["type-parameter-index"] = self.buf.ru8()
                 val["data"]["bound-index"] = self.buf.ru8()
@@ -478,6 +480,9 @@ class JavaClassModule(module.RuminantModule):
                 ]
             case b"\x43" | b"\x44" | b"\x45" | b"\x46":
                 val["data"]["offset"] = self.buf.ru16()
+            case b"\x47" | b"\x48" | b"\x49" | b"\x4a" | b"\x4b":
+                val["data"]["offset"] = self.buf.ru16()
+                val["data"]["type-argument-index"] = self.buf.ru8()
             case _:
                 raise ValueError(f"Unkown tag type '{tag.decode('latin-1')}'")
 
