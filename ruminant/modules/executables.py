@@ -592,7 +592,7 @@ class JavaClassModule(module.RuminantModule):
                             case 0x84:
                                 name = [
                                     name,
-                                    self.buf.ru8(),
+                                    self.buf.ru16() if wide else self.buf.ru8(),
                                     self.sign(self.buf.ri16() if wide else self.buf.ri8()),
                                 ]
                             case 0x12:
@@ -643,6 +643,8 @@ class JavaClassModule(module.RuminantModule):
                         if isinstance(name, list):
                             name = name[0] + " " + ", ".join([str(x) for x in name[1:]])
 
+                        if module.debug:
+                            print("   ", name)
                         val["code"][pc] = name
 
                     self.buf.skipunit()
@@ -1087,6 +1089,8 @@ class JavaClassModule(module.RuminantModule):
             method["name"] = self.resolve(self.buf.ru16())
             method["descriptor"] = self.resolve(self.buf.ru16())
 
+            if module.debug:
+                print(method["name"])
             self.read_attributes(method)
 
             meta["methods"].append(method)
