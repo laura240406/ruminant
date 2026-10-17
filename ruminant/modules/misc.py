@@ -11,6 +11,7 @@ import base64
 import json
 import math
 import io
+import hashlib
 
 
 debug = module.debug
@@ -2098,7 +2099,7 @@ class MindustrySchematicModule(module.RuminantModule):
 
 
 @module.register
-class GlTFSchematicModule(module.RuminantModule):
+class GlTFModule(module.RuminantModule):
     desc = "glTF files."
 
     @staticmethod
@@ -2177,5 +2178,66 @@ class GlTFSchematicModule(module.RuminantModule):
                 raise e
 
             pass
+
+        return meta
+
+
+@module.register
+class CtrFirmModule(module.RuminantModule):
+    desc = "3DS firmware files."
+
+    @staticmethod
+    def identify(buf: Buf, ctx={}) -> bool:
+        return buf.peek(4) == b"FIRM"
+
+    def chew(self) -> ruminant_types.JSON:
+        meta: dict = {}
+        meta["type"] = "3ds-firm"
+
+        self.buf.skip(4)
+        meta["priority"] = self.buf.ru32l()
+        meta["arm11-entrypoint"] = "0x" + hex(self.buf.ru32l())[2:].zfill(8)
+        meta["arm9-entrypoint"] = "0x" + hex(self.buf.ru32l())[2:].zfill(8)
+        meta["reserved"] = self.buf.rh(0x30)
+
+        meta["sections"] = []
+        for i in range(0, 4):
+            section: dict = {}
+            section["offset"] = self.buf.ru32l()
+            section["address"] = "0x" + hex(self.buf.ru32l())[2:].zfill(8)
+            section["size"] = self.buf.ru32l()
+            section["copy-method"] = utils.unraw(
+                self.buf.ru32l(), 4, {0x00000000: "NDMA", 0x00000001: "XDMA", 0x00000002: "memcpy"}, True
+            )
+            section["sha256"] = {"value": self.buf.rh(0x20)}
+
+            meta["sections"].append(section)
+
+        meta["signature"] = self.buf.rh(0x100)
+
+        max_offset = self.buf.tell()
+        for section in meta["sections"]:
+            if section["size"] == 0:
+                continue
+
+            max_offset = max(max_offset, section["offset"] + section["size"])
+
+            self.buf.seek(section["offset"])
+            self.buf.pasunit(section["size"])
+
+            with self.buf.subunit():
+                with self.buf:
+                    h = hashlib.sha256(self.buf.read(self.buf.available())).hexdigest()
+                    if section["sha256"]["value"] != h:
+                        section["sha256"]["correct"] = False
+                        section["sha256"]["actual"] = h
+                    else:
+                        section["sha256"]["correct"] = True
+
+                section["blob"] = chew(self.buf)
+
+            self.buf.sapunit()
+
+        self.buf.seek(max_offset)
 
         return meta
