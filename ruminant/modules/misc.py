@@ -697,7 +697,7 @@ class JavaSerializationData(module.RuminantModule):
                 ):
                     raise ValueError(f"Invalid state for flags: {obj['data']['flags']['names']}")
                 else:
-                    raise ValueError("Invalid state for flags: {obj['data']['classdesc']['data']['flags']['names']}")
+                    raise ValueError(f"Invalid state for flags: {obj['data']['classdesc']['data']['flags']['names']}")
 
             case 0x74:
                 obj["type"] = "string"
