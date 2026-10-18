@@ -1,5 +1,5 @@
 from .. import module, utils, constants, ruminant_types
-from ..buf import Buf
+from ..buf import Buf, UnitException
 from . import chew
 import tempfile
 import sqlite3
@@ -2213,7 +2213,7 @@ class CtrFirmModule(module.RuminantModule):
 
             meta["sections"].append(section)
 
-        meta["signature"] = self.buf.rh(0x100)
+        meta["signature"] = {"raw": self.buf.rh(0x100)}
 
         max_offset = self.buf.tell()
         for section in meta["sections"]:
@@ -2239,5 +2239,32 @@ class CtrFirmModule(module.RuminantModule):
             self.buf.sapunit()
 
         self.buf.seek(max_offset)
+
+        sig = int(meta["signature"]["raw"], 16)
+        for name, n in constants.CTR_FIRM_MODULI.items():
+            buf = Buf(pow(sig, 65537, n).to_bytes(256, "big"))
+
+            try:
+                assert buf.ru8() == 0
+
+                typ = buf.ru8()
+                assert typ in (0x01, 0x02)
+
+                if typ == 0x01:
+                    assert buf.pu8() in (0x00, 0xff)
+                    while buf.pu8() == 0xff:
+                        buf.skip(1)
+
+                    assert buf.ru8() == 0x00
+
+                    data = utils.read_der(buf)
+                    meta["signature"]["key"] = name
+                    meta["signature"]["sighax"] = False
+                    meta["signature"]["der"] = data
+                else:
+                    meta["signature"]["key"] = name
+                    meta["signature"]["sighax"] = True
+            except (AssertionError, UnitException):
+                pass
 
         return meta
