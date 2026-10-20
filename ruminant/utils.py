@@ -44,6 +44,7 @@ def _xml_to_dict(elem):
                     "{http://ns.google.com/photos/1.0/camera/}hdrp_makernote"
                     | "{http://ns.google.com/photos/1.0/camera/}shot_log_data"
                     | "{http://ns.adobe.com/xap/1.0/g/img/}image"
+                    | "{http://ns.google.com/photos/1.0/camera/}HdrPlusMakernote"
                 ):
                     res["attributes"][k] = chew(base64.b64decode(v))
 
