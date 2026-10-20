@@ -3523,6 +3523,31 @@ class FFMpreg(object):
 
         return packet
 
+    @staticmethod
+    def read_wvtt_packet(buf: Buf) -> dict:
+        packet: dict = {}
+
+        packet["length"] = buf.ru32()
+        packet["type"] = buf.rs(4)
+        buf.pasunit(packet["length"] - 8)
+
+        match packet["type"]:
+            case "vtte":
+                pass
+            case "vttc":
+                packet["children"] = []
+                while buf.hasunit():
+                    packet["children"].append(FFMpreg.read_wvtt_packet(buf))
+            case "payl":
+                packet["text"] = buf.rs(buf.unit)
+            case _:
+                packet["payload"] = buf.rh(buf.unit)
+                packet["unknown"] = True
+
+        buf.sapunit()
+
+        return packet
+
     # BOOK New FFMpreg method
 
 

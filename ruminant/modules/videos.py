@@ -1352,6 +1352,12 @@ class IsoModule(module.RuminantModule):
         elif typ == "mett":
             atom["data"]["content-encoding"] = self.buf.rzs()
             atom["data"]["mime-format"] = self.buf.rzs()
+        elif typ == "wvtt":
+            atom["data"]["reserved"] = self.buf.rh(6)
+            atom["data"]["dref"] = self.buf.ru16()
+            self.read_more(atom)
+        elif typ == "vttC":
+            atom["data"]["config"] = self.buf.rs(self.buf.unit).split("\n")
         elif typ == "auxC":
             self.read_version(atom)
             atom["data"]["aux-type"] = self.buf.rzs()
@@ -1815,6 +1821,17 @@ class IsoModule(module.RuminantModule):
                     self.buf.pasunit(sample_sizes[index])
 
                     data["samples"][index] = FFMpreg.read_vp9_packet(self.buf)
+
+                    self.buf.sapunit()
+            case "wvtt":
+                ranges = utils.expand_ranges(secrets.get_parameter("0", data, "ranges"), 0, len(sample_to_offset) - 1)
+                data["samples"] = {}
+
+                for index in ranges:
+                    self.buf.seek(sample_to_offset[index])
+                    self.buf.pasunit(sample_sizes[index])
+
+                    data["samples"][index] = FFMpreg.read_wvtt_packet(self.buf)
 
                     self.buf.sapunit()
             # BOOK New MP4 handler
@@ -2982,6 +2999,16 @@ class MatroskaModule(module.RuminantModule):
                         self.buf.pasunit(sample_sizes[stream["id"]][index])
 
                         stream["samples"][index] = FFMpreg.read_vp8_packet(self.buf)
+
+                        self.buf.sapunit()
+                case "D_WEBVTT/SUBTITLES":
+                    stream["samples"] = {}
+
+                    for index in ranges:
+                        self.buf.seek(sample_offsets[stream["id"]][index])
+                        self.buf.pasunit(sample_sizes[stream["id"]][index])
+
+                        stream["samples"][index] = FFMpreg.read_wvtt_packet(self.buf)
 
                         self.buf.sapunit()
                 # BOOK New MKV handler
