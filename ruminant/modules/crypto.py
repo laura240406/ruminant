@@ -50,6 +50,7 @@ class PemModule(module.RuminantModule):
             or buf.peek(30) == b"-----BEGIN EC PRIVATE KEY-----"
             or buf.peek(37) == b"-----BEGIN ENCRYPTED PRIVATE KEY-----"
             or buf.peek(35) == b"-----BEGIN CERTIFICATE REQUEST-----"
+            or buf.peek(29) == b"-----BEGIN DH PARAMETERS-----"
         )
 
     def chew(self) -> ruminant_types.JSON:
