@@ -3655,7 +3655,8 @@ class NcsdModule(module.RuminantModule):
         meta["type"] = "ncsd"
 
         meta["header"] = {}
-        meta["header"]["rsa-signature"] = self.buf.rh(256)
+        meta["header"]["signature"] = {"raw": self.buf.rh(256)}
+        meta["header"]["signature"] |= utils.ctr_signature_decode(int(meta["header"]["signature"]["raw"], 16))
         self.buf.skip(4)
         meta["header"]["size"] = self.buf.ru32l()
 
@@ -3839,7 +3840,8 @@ class NcchModule(module.RuminantModule):
         meta["type"] = "ncch"
 
         meta["header"] = {}
-        meta["header"]["rsa-signature"] = self.buf.rh(256)
+        meta["header"]["signature"] = {"raw": self.buf.rh(256)}
+        meta["header"]["signature"] |= utils.ctr_signature_decode(int(meta["header"]["signature"]["raw"], 16))
         self.buf.skip(4)
         meta["header"]["size"] = self.buf.ru32l()
 

@@ -887,7 +887,7 @@ def argon2(
     )
 
 
-def aes_cbc_pkcs7(key: bytes, iv: bytes, input_text: bytes, decrypt: bool = True) -> bytes:
+def aes_cbc(key: bytes, iv: bytes, input_text: bytes, decrypt: bool = True) -> bytes:
     assert len(iv) == 16, "invalid IV length"
 
     f = AES(key).decrypt if decrypt else AES(key).encrypt
@@ -901,6 +901,12 @@ def aes_cbc_pkcs7(key: bytes, iv: bytes, input_text: bytes, decrypt: bool = True
     else:
         for i in range(16, len(input_text), 16):
             output_text += f(bytes([x ^ y for x, y in zip(input_text[i - 16 : i], input_text[i : i + 16])]))
+
+    return output_text
+
+
+def aes_cbc_pkcs7(key: bytes, iv: bytes, input_text: bytes, decrypt: bool = True) -> bytes:
+    output_text = aes_cbc(key, iv, input_text, decrypt)
 
     padding = output_text[-1]
     assert padding > 0 and padding <= 16, "invalid padding"

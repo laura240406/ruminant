@@ -1,5 +1,5 @@
-from .. import module, utils, constants, ruminant_types
-from ..buf import Buf, UnitException
+from .. import module, utils, constants, ruminant_types, crypto
+from ..buf import Buf
 from . import chew
 import tempfile
 import sqlite3
@@ -2240,31 +2240,66 @@ class CtrFirmModule(module.RuminantModule):
 
         self.buf.seek(max_offset)
 
-        sig = int(meta["signature"]["raw"], 16)
-        for name, n in constants.CTR_FIRM_MODULI.items():
-            buf = Buf(pow(sig, 65537, n).to_bytes(256, "big"))
+        meta["signature"] |= utils.ctr_signature_decode(int(meta["signature"]["raw"], 16))
 
-            try:
-                assert buf.ru8() == 0
+        return meta
 
-                typ = buf.ru8()
-                assert typ in (0x01, 0x02)
 
-                if typ == 0x01:
-                    assert buf.pu8() in (0x00, 0xff)
-                    while buf.pu8() == 0xff:
-                        buf.skip(1)
+@module.register
+class CtrOtpModule(module.RuminantModule):
+    desc = "3DS OTP files."
 
-                    assert buf.ru8() == 0x00
+    @staticmethod
+    def identify(buf: Buf, ctx={}) -> bool:
+        if buf.available() >= 256 and buf.peek(4) == b"\x0f\xb0\xad\xde":
+            return True
 
-                    data = utils.read_der(buf)
-                    meta["signature"]["key"] = name
-                    meta["signature"]["sighax"] = False
-                    meta["signature"]["der"] = data
-                else:
-                    meta["signature"]["key"] = name
-                    meta["signature"]["sighax"] = True
-            except (AssertionError, UnitException):
-                pass
+        block = buf.peek(16)
+        for name, (key, iv) in constants.CTR_OTP_KEYS.items():
+            block = crypto.aes_cbc(key, iv, block)
+
+            if block[:4] == b"\x0f\xb0\xad\xde":
+                return True
+
+        return False
+
+    def chew(self) -> ruminant_types.JSON:
+        meta: dict = {}
+        meta["type"] = "3ds-otp"
+
+        if self.buf.peek(4) != b"\x0f\xb0\xad\xde":
+            block = self.buf.peek(16)
+            for name, (key, iv) in constants.CTR_OTP_KEYS.items():
+                block = crypto.aes_cbc(key, iv, block)
+
+                if block[:4] == b"\x0f\xb0\xad\xde":
+                    meta["encryption"] = name
+                    self.buf = Buf(crypto.aes_cbc(key, iv, self.buf.read(256)))
+                    break
+        else:
+            meta["encryption"] = "NONE"
+
+        h = hashlib.sha256(self.buf.peek(224)).hexdigest()
+
+        self.buf.skip(4)
+        meta["device-id"] = self.buf.ru32l()
+        meta["fallback-key-y"] = self.buf.rh(16)
+        meta["otp-version"] = self.buf.ru8()
+        meta["is-dev"] = self.buf.ru8()
+        meta["manufacturing-date"] = (
+            f"{str(self.buf.ru8() + 1900).zfill(4)}-{str(self.buf.ru8()).zfill(2)}-{str(self.buf.ru8()).zfill(2)}T{str(self.buf.ru8()).zfill(2)}:{str(self.buf.ru8()).zfill(2)}:{str(self.buf.ru8()).zfill(2)}+00:00"
+        )
+        meta["ctcert-expiry"] = utils.unix_to_date(self.buf.ru32() if meta["otp-version"] < 5 else self.buf.ru32l())
+        meta["ctcert-private-key"] = self.buf.rh(32)
+        meta["ctcert-signature"] = self.buf.rh(60)
+        meta["reserved"] = self.buf.rh(16)
+        meta["boot9-seed"] = self.buf.rh(80)
+        meta["sha256"] = {"raw": self.buf.rh(32)}
+
+        if meta["sha256"]["raw"] != h:
+            meta["sha256"]["correct"] = False
+            meta["sha256"]["actual"] = h
+        else:
+            meta["sha256"]["correct"] = True
 
         return meta

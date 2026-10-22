@@ -7,8 +7,9 @@ from .constants import (
     PGP_SIGNATURE_TYPES,
     PGP_S2K_TYPES,
     CXX_OPERATORS,
+    CTR_FIRM_MODULI,
 )
-from .buf import Buf, _decode
+from .buf import Buf, _decode, UnitException
 from .modules import chew
 from .module import debug
 from .crypto import native_mode
@@ -1989,3 +1990,35 @@ def decompress_lz4_frame(buf: Buf, fd: BinaryIO) -> dict:
     frame["length"] = buf.tell() - offset
 
     return frame
+
+
+def ctr_signature_decode(sig):
+    res = {}
+
+    for name, n in CTR_FIRM_MODULI.items():
+        buf = Buf(pow(sig, 65537, n).to_bytes(256, "big"))
+
+        try:
+            assert buf.ru8() == 0
+
+            typ = buf.ru8()
+            assert typ in (0x01, 0x02)
+
+            if typ == 0x01:
+                assert buf.pu8() in (0x00, 0xff)
+                while buf.pu8() == 0xff:
+                    buf.skip(1)
+
+                assert buf.ru8() == 0x00
+
+                data = read_der(buf)
+                res["key"] = name
+                res["sighax"] = False
+                res["der"] = data
+            else:
+                res["key"] = name
+                res["sighax"] = True
+        except (AssertionError, UnitException):
+            pass
+
+    return res

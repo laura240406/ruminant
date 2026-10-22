@@ -124,6 +124,7 @@ Ruminant is still in early alpha but it can already process the following file t
 * DVD .VOB files/MPEG-PS
 * glTF models
 * 3DS firmware files
+* 3DS OTP dumps
 
 ## Video codecs
 Ruminant can extract and parse data units of specific codecs from specific containers.
