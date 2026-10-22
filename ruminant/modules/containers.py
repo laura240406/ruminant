@@ -3659,7 +3659,7 @@ class NcsdModule(module.RuminantModule):
         self.buf.skip(4)
         meta["header"]["size"] = self.buf.ru32l()
 
-        self.buf.pasunit(meta["header"]["size"] * 0x200 - 256 - 8)
+        self.buf.pasunit(min(meta["header"]["size"] * 0x200 - 256 - 8, self.buf.available()))
 
         meta["header"]["media-id"] = self.buf.ru64l()
         meta["header"]["partition-fs-type"] = utils.unraw(
@@ -3940,7 +3940,7 @@ class NcchModule(module.RuminantModule):
                         while len(region["parsed"]["strings"]) > 0 and region["parsed"]["strings"][-1] == "":
                             region["parsed"]["strings"].pop()
                     case "exefs":
-                        if decrypted:
+                        if decrypted and self.buf.hasunit():
                             region["parsed"] = self.read_exefs()
                     case _:
                         del region["parsed"]
