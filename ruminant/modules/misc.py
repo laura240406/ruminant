@@ -2303,3 +2303,32 @@ class CtrOtpModule(module.RuminantModule):
             meta["sha256"]["correct"] = True
 
         return meta
+
+
+@module.register
+class TptSaveModule(module.RuminantModule):
+    desc = "The Powder Toy save and stamp files."
+
+    @staticmethod
+    def identify(buf: Buf, ctx={}) -> bool:
+        return buf.peek(4) == b"OPS1"
+
+    def chew(self) -> ruminant_types.JSON:
+        meta: dict = {}
+        meta["type"] = "tpt-save"
+
+        self.buf.skip(4)
+        meta["version"] = self.buf.ru8()
+        meta["cell"] = self.buf.ru8()
+        meta["width"] = self.buf.ru8()
+        meta["height"] = self.buf.ru8()
+        meta["to-alloc"] = self.buf.ru32l()
+
+        fd = utils.tempfd()
+        utils.stream_bzip2(self.buf, fd, self.buf.available())
+        fd.seek(0)
+        buf = Buf(fd)
+
+        meta["inner"] = utils.read_bson(buf)
+
+        return meta

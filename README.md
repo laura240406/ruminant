@@ -125,6 +125,7 @@ Ruminant is still in early alpha but it can already process the following file t
 * glTF models
 * 3DS firmware files
 * 3DS OTP dumps
+* The Powder Toy saves and stamps
 
 ## Video codecs
 Ruminant can extract and parse data units of specific codecs from specific containers.

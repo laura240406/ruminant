@@ -13,6 +13,7 @@ from .buf import Buf, _decode, UnitException
 from .modules import chew
 from .module import debug
 from .crypto import native_mode
+from . import ruminant_types
 import uuid
 import xml.etree.ElementTree as ET
 from datetime import datetime, timezone, timedelta
@@ -2022,3 +2023,69 @@ def ctr_signature_decode(sig):
             pass
 
     return res
+
+
+BSON_END = object()
+
+
+def _read_bson(buf: Buf) -> tuple[str, object]:
+    typ = buf.ru8()
+    if typ != 0x00:
+        name = buf.rzs()
+
+    match typ:
+        case 0x00:
+            return "", BSON_END
+        case 0x02:
+            return name, buf.rs(buf.ru32l())
+        case 0x03 | 0x04:
+            return name, read_bson(buf)
+        case 0x05:
+            length = buf.ru32l()
+            return name, {
+                "type": unraw(
+                    buf.ru8(),
+                    1,
+                    {
+                        0x00: "generic",
+                        0x01: "function",
+                        0x02: "binary",
+                        0x03: "UUID",
+                        0x04: "UUID",
+                        0x05: "MD5",
+                        0x06: "encrypted",
+                        0x07: "compressed BSON column",
+                        0x08: "sensitive",
+                        0x09: "vector",
+                    },
+                    True,
+                ),
+                "length": length,
+                "payload": chew(buf.read(length), blob_mode=True),
+            }
+        case 0x08:
+            return name, bool(buf.ru8())
+        case 0x10:
+            return name, buf.ri32l()
+        case 0x12:
+            return name, buf.ri64l()
+        case _:
+            raise ValueError(f"Unknown BSON type '{typ}' with name '{name}'")
+
+
+def read_bson(buf: Buf) -> ruminant_types.JSON:
+    length = buf.ru32l()
+
+    buf.pasunit(length - 4)
+
+    objects: dict[str, ruminant_types.JSON] = {}
+    while True:
+        name, obj = _read_bson(buf)
+        if obj == BSON_END:
+            break
+
+        objects[name] = cast(ruminant_types.JSON, obj)
+
+    buf.sapunit()
+
+    return objects
