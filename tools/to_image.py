@@ -34,6 +34,8 @@ instructions_rows = []
 for i in range(0, len(instructions_bitmap), instructions_row_length):
     instructions_rows.append(instructions_bitmap[i : i + instructions_row_length])
 
+instructions_row_length += 48
+
 os.chdir(os.path.dirname(os.path.dirname(__file__)))
 
 
@@ -45,44 +47,26 @@ def run(cmd):
 source_code = run("git archive --format tar HEAD | gzip -9")
 print(f"Source code is {len(source_code)} bytes")
 
-while len(source_code) < instructions_row_length * (instructions_row_length - 20) // 9:
-    source_code += b"\x00"
-
 side = max(
     math.ceil(math.sqrt(len(source_code) / 3)),
     instructions_row_length // 3,
 )
 
-if side > instructions_row_length // 3:
-    overhang = side - instructions_row_length // 3
-    for i in range(0, 20):
-        instructions_rows[i] += b"\xff\xff\xff" * overhang
-
 instructions_bitmap = bytearray()
 for i in instructions_rows:
+    i = b"\xff\xff\xff\xff\xff\xff\xff\xff" + i
+    while len(i) < (side - 11) * 3:
+        i += b"\xff"
+
+    i += b"\xff\xff\xff\xff\xff\xff\xff"
+
+    instructions_bitmap += b"\x1f\x8b\x08\x04\x8f\x0b\x9e\x3b\x00\x03"
+    instructions_bitmap += (len(i) + 4).to_bytes(2, "little")
+    instructions_bitmap += bytes(2)
+    instructions_bitmap += (len(i)).to_bytes(2, "little")
     instructions_bitmap += i
-
-print(len(instructions_bitmap))
-
-garbage_length = len(instructions_bitmap) - 12 - 10
-instructions_bitmap[:10] = bytes.fromhex("1f8b08048f0b9e3b0003")
-instructions_bitmap[10] = garbage_length & 0xff
-instructions_bitmap[11] = garbage_length >> 8
-garbage_length -= 4
-instructions_bitmap[12] = 0
-instructions_bitmap[13] = 0
-instructions_bitmap[14] = garbage_length & 0xff
-instructions_bitmap[15] = garbage_length >> 8
-instructions_bitmap[-10] = 3
-instructions_bitmap[-9] = 0
-instructions_bitmap[-8] = 0
-instructions_bitmap[-7] = 0
-instructions_bitmap[-6] = 0
-instructions_bitmap[-5] = 0
-instructions_bitmap[-4] = 0
-instructions_bitmap[-3] = 0
-instructions_bitmap[-2] = 0
-instructions_bitmap[-1] = 0
+    instructions_bitmap += b"\x03\x00"
+    instructions_bitmap += bytes(8)
 
 output = instructions_bitmap + source_code
 cutout = math.ceil(len(output) / side / 3)
