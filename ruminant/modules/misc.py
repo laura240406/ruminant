@@ -2251,7 +2251,10 @@ class CtrOtpModule(module.RuminantModule):
 
     @staticmethod
     def identify(buf: Buf, ctx={}) -> bool:
-        if buf.available() >= 256 and buf.peek(4) == b"\x0f\xb0\xad\xde":
+        if buf.available() < 256:
+            return False
+
+        if buf.peek(4) == b"\x0f\xb0\xad\xde":
             return True
 
         block = buf.peek(16)

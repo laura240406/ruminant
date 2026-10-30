@@ -70,7 +70,7 @@ class IsoModule(module.RuminantModule):
         if length == 0:
             pos = self.buf.tell()
             self.buf.seek(0, 2)
-            length = self.buf.tell()
+            length = self.buf.tell() - pos + 4
             self.buf.seek(pos)
         typ = self.buf.rs(4, "latin-1")
 
@@ -78,6 +78,8 @@ class IsoModule(module.RuminantModule):
             length = self.buf.ru64() - 8
 
         atom = {"type": typ, "offset": offset, "length": length, "data": {}}
+
+        print(atom)
 
         length -= 8
         self.buf.pushunit()
@@ -1362,6 +1364,9 @@ class IsoModule(module.RuminantModule):
             self.read_version(atom)
             atom["data"]["aux-type"] = self.buf.rzs()
             atom["data"]["payload"] = self.buf.rh(self.buf.unit)
+        elif typ == "jxlc":
+            with self.buf.subunit():
+                atom["data"]["codestream"] = chew(self.buf)
         elif typ[0] == "©" or typ in ("iods", "SDLN", "smrd"):
             if typ[:2] == "©T" and self.buf.pu16() == self.buf.unit - 4:
                 length = self.buf.ru16()

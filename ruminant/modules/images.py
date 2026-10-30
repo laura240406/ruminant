@@ -3478,3 +3478,20 @@ class QoiModule(module.RuminantModule):
             meta["has-footer"] = True
 
         return meta
+
+
+@module.register
+class JxlContainerModule(module.RuminantModule):
+    desc = "JXL container files."
+
+    @staticmethod
+    def identify(buf: Buf, ctx={}) -> bool:
+        return buf.peek(12) == b"\x00\x00\x00\x0c\x4a\x58\x4c\x20\x0d\x0a\x87\x0a"
+
+    def chew(self) -> ruminant_types.JSON:
+        meta: dict = {}
+        meta["type"] = "jxl-container"
+
+        self.buf.skip(12)
+
+        return meta
