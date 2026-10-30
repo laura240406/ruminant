@@ -52,7 +52,6 @@ side = max(
     math.ceil(math.sqrt(len(source_code) / 3)),
     instructions_row_length // 3,
 )
-print(f"Image will be {side}x{side} pixels")
 
 if side > instructions_row_length // 3:
     overhang = side - instructions_row_length // 3
@@ -62,6 +61,8 @@ if side > instructions_row_length // 3:
 instructions_bitmap = bytearray()
 for i in instructions_rows:
     instructions_bitmap += i
+
+print(len(instructions_bitmap))
 
 garbage_length = len(instructions_bitmap) - 12 - 10
 instructions_bitmap[:10] = bytes.fromhex("1f8b08048f0b9e3b0003")
@@ -84,8 +85,11 @@ instructions_bitmap[-2] = 0
 instructions_bitmap[-1] = 0
 
 output = instructions_bitmap + source_code
-if len(output) < 3 * side**2:
-    output += bytes(3 * side**2 - len(output))
+cutout = math.ceil(len(output) / side / 3)
+if len(output) < side * cutout * 3:
+    output += bytes((side * cutout * 3 - len(output)))
 
-img = Image.frombytes("RGB", (side, side), output)
+print(f"Image will be {side}x{cutout} pixels")
+
+img = Image.frombytes("RGB", (side, cutout), output)
 img.save("src.png")
