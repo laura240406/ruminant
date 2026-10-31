@@ -36,7 +36,7 @@ for i in range(0, len(instructions_bitmap), instructions_row_length):
 
 instructions_row_length += 48
 
-os.chdir(os.path.dirname(__file__))
+os.chdir(os.path.dirname(os.path.dirname(__file__)))
 
 
 def run(cmd):
