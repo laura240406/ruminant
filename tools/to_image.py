@@ -36,14 +36,13 @@ for i in range(0, len(instructions_bitmap), instructions_row_length):
 
 instructions_row_length += 48
 
-os.chdir(os.path.dirname(os.path.dirname(__file__)))
-
 
 def run(cmd):
     result = subprocess.run(cmd, shell=True, capture_output=True, check=True)
     return result.stdout
 
 
+os.chdir(run("git rev-parse --show-toplevel").decode("utf-8").strip())
 source_code = run("git archive --format tar HEAD | gzip -9")
 print(f"Source code is {len(source_code)} bytes")
 
