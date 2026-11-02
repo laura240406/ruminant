@@ -1178,7 +1178,9 @@ class JPEGModule(module.RuminantModule):
 
                 chunk["data"]["image-length"] = self.buf.tell() - image_length
             elif typ == 0xfe:
-                chunk["data"]["comment"] = utils.decode(self.buf.readunit())
+                chunk["data"]["comment"] = utils.decode(self.buf.readunit()).replace("\r\n", "\n").split("\n")
+                if len(chunk["data"]["comment"]) == 1:
+                    chunk["data"]["comment"] = chunk["data"]["comment"][0]
             elif typ == 0xdb:
                 chunk["tables"] = []
 
