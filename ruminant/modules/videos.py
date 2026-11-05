@@ -79,8 +79,6 @@ class IsoModule(module.RuminantModule):
 
         atom = {"type": typ, "offset": offset, "length": length, "data": {}}
 
-        print(atom)
-
         length -= 8
         self.buf.pushunit()
         self.buf.setunit(length)
