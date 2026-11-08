@@ -1868,8 +1868,10 @@ class PcapNgModule(module.RuminantModule):
                 record["name"] = dns_read_name(base, length)
 
                 record["type"] = utils.unraw(self.buf.ru16(), 2, constants.DNS_RECORD_TYPES, True)
+                tmp = self.buf.ru16()
+                record["msb"] = tmp >> 15
                 record["class"] = utils.unraw(
-                    self.buf.ru16(),
+                    tmp & 0x7fff,
                     2,
                     {0x0001: "Internet", 0x00fe: "NONE", 0x00ff: "ANY"},
                     True,
@@ -2399,6 +2401,51 @@ class PcapNgModule(module.RuminantModule):
 
                             record["rdata"] = {}
                             record["rdata"]["target"] = dns_read_name(base, length)
+
+                            self.buf.sapunit()
+                        case "NSEC":
+                            tmp = self.buf.ru16()
+                            record["msb"] = tmp >> 15
+                            record["class"] = utils.unraw(
+                                tmp & 0x7fff,
+                                2,
+                                {0x0001: "Internet", 0x00fe: "NONE", 0x00ff: "ANY"},
+                                True,
+                            )
+                            record["ttl"] = self.buf.ru32()
+                            record["rdata-length"] = self.buf.ru16()
+
+                            self.buf.pasunit(record["rdata-length"])
+
+                            record["rdata"] = {}
+                            record["rdata"]["target"] = dns_read_name(base, length)
+
+                            record["rdata"]["type-bitmaps"] = []
+                            while self.buf.hasunit():
+                                bitmap = {}
+                                bitmap["window"] = self.buf.ru8()
+                                bitmap["bitmap-length"] = self.buf.ru8()
+                                bitmap["bitmap"] = self.buf.rh(bitmap["bitmap-length"])
+
+                                record["rdata"]["type-bitmaps"].append(bitmap)
+
+                            record["rdata"]["types"] = []
+                            for entry in record["rdata"]["type-bitmaps"]:
+                                bits = int(
+                                    entry["bitmap"] + "00" * (32 - entry["bitmap-length"]),
+                                    16,
+                                )
+
+                                for offset in range(0, 256):
+                                    if bits & (1 << (255 - offset)):
+                                        record["rdata"]["types"].append(
+                                            utils.unraw(
+                                                (entry["window"] << 8) | offset,
+                                                2,
+                                                constants.DNS_RECORD_TYPES,
+                                                True,
+                                            )
+                                        )
 
                             self.buf.sapunit()
                         case _:

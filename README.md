@@ -46,7 +46,7 @@ Ruminant is still in early alpha but it can already process the following file t
   * IPv4/IPv6/LLDP/ARP
   * UDP/TCP/ICMP/IGMP/ICMPv6
   * DNS
-      * A/OPT/SOA/AAAA/MX/TXT/CAA/DNSKEY/RRSIG/HTTPS/NS/SSHFP/OPENPGPKEY/SRV/DS/NSEC3/PTR
+      * A/OPT/SOA/AAAA/MX/TXT/CAA/DNSKEY/RRSIG/HTTPS/NS/SSHFP/OPENPGPKEY/SRV/DS/NSEC3/PTR/NSEC
 * NCSD (Nintendo 3DS)
 * NCCH (Nintendo 3DS)
 * SMDH (Nintendo 3DS)
