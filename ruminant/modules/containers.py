@@ -1895,8 +1895,10 @@ class PcapNgModule(module.RuminantModule):
 
                     match record["type"]:
                         case "A":
+                            tmp = self.buf.ru16()
+                            record["msb"] = tmp >> 15
                             record["class"] = utils.unraw(
-                                self.buf.ru16(),
+                                tmp & 0x7fff,
                                 2,
                                 {0x0001: "Internet", 0x00fe: "NONE", 0x00ff: "ANY"},
                                 True,
@@ -1984,8 +1986,10 @@ class PcapNgModule(module.RuminantModule):
 
                             self.buf.sapunit()
                         case "SOA":
+                            tmp = self.buf.ru16()
+                            record["msb"] = tmp >> 15
                             record["class"] = utils.unraw(
-                                self.buf.ru16(),
+                                tmp & 0x7fff,
                                 2,
                                 {0x0001: "Internet", 0x00fe: "NONE", 0x00ff: "ANY"},
                                 True,
@@ -2005,8 +2009,10 @@ class PcapNgModule(module.RuminantModule):
 
                             self.buf.sapunit()
                         case "AAAA":
+                            tmp = self.buf.ru16()
+                            record["msb"] = tmp >> 15
                             record["class"] = utils.unraw(
-                                self.buf.ru16(),
+                                tmp & 0x7fff,
                                 2,
                                 {0x0001: "Internet", 0x00fe: "NONE", 0x00ff: "ANY"},
                                 True,
@@ -2021,8 +2027,10 @@ class PcapNgModule(module.RuminantModule):
 
                             self.buf.sapunit()
                         case "MX":
+                            tmp = self.buf.ru16()
+                            record["msb"] = tmp >> 15
                             record["class"] = utils.unraw(
-                                self.buf.ru16(),
+                                tmp & 0x7fff,
                                 2,
                                 {0x0001: "Internet", 0x00fe: "NONE", 0x00ff: "ANY"},
                                 True,
@@ -2038,8 +2046,10 @@ class PcapNgModule(module.RuminantModule):
 
                             self.buf.sapunit()
                         case "TXT":
+                            tmp = self.buf.ru16()
+                            record["msb"] = tmp >> 15
                             record["class"] = utils.unraw(
-                                self.buf.ru16(),
+                                tmp & 0x7fff,
                                 2,
                                 {0x0001: "Internet", 0x00fe: "NONE", 0x00ff: "ANY"},
                                 True,
@@ -2054,8 +2064,10 @@ class PcapNgModule(module.RuminantModule):
 
                             self.buf.sapunit()
                         case "CAA":
+                            tmp = self.buf.ru16()
+                            record["msb"] = tmp >> 15
                             record["class"] = utils.unraw(
-                                self.buf.ru16(),
+                                tmp & 0x7fff,
                                 2,
                                 {0x0001: "Internet", 0x00fe: "NONE", 0x00ff: "ANY"},
                                 True,
@@ -2073,8 +2085,10 @@ class PcapNgModule(module.RuminantModule):
                             self.buf.sapunit()
                         case "DNSKEY":
                             # https://datatracker.ietf.org/doc/html/rfc4034
+                            tmp = self.buf.ru16()
+                            record["msb"] = tmp >> 15
                             record["class"] = utils.unraw(
-                                self.buf.ru16(),
+                                tmp & 0x7fff,
                                 2,
                                 {0x0001: "Internet", 0x00fe: "NONE", 0x00ff: "ANY"},
                                 True,
@@ -2121,8 +2135,10 @@ class PcapNgModule(module.RuminantModule):
 
                             self.buf.sapunit()
                         case "RRSIG":
+                            tmp = self.buf.ru16()
+                            record["msb"] = tmp >> 15
                             record["class"] = utils.unraw(
-                                self.buf.ru16(),
+                                tmp & 0x7fff,
                                 2,
                                 {0x0001: "Internet", 0x00fe: "NONE", 0x00ff: "ANY"},
                                 True,
@@ -2145,8 +2161,10 @@ class PcapNgModule(module.RuminantModule):
 
                             self.buf.sapunit()
                         case "HTTPS":
+                            tmp = self.buf.ru16()
+                            record["msb"] = tmp >> 15
                             record["class"] = utils.unraw(
-                                self.buf.ru16(),
+                                tmp & 0x7fff,
                                 2,
                                 {0x0001: "Internet", 0x00fe: "NONE", 0x00ff: "ANY"},
                                 True,
@@ -2206,8 +2224,10 @@ class PcapNgModule(module.RuminantModule):
 
                             self.buf.sapunit()
                         case "NS":
+                            tmp = self.buf.ru16()
+                            record["msb"] = tmp >> 15
                             record["class"] = utils.unraw(
-                                self.buf.ru16(),
+                                tmp & 0x7fff,
                                 2,
                                 {0x0001: "Internet", 0x00fe: "NONE", 0x00ff: "ANY"},
                                 True,
@@ -2222,8 +2242,10 @@ class PcapNgModule(module.RuminantModule):
 
                             self.buf.sapunit()
                         case "SSHFP":
+                            tmp = self.buf.ru16()
+                            record["msb"] = tmp >> 15
                             record["class"] = utils.unraw(
-                                self.buf.ru16(),
+                                tmp & 0x7fff,
                                 2,
                                 {0x0001: "Internet", 0x00fe: "NONE", 0x00ff: "ANY"},
                                 True,
@@ -2250,8 +2272,10 @@ class PcapNgModule(module.RuminantModule):
 
                             self.buf.sapunit()
                         case "OPENPGPKEY":
+                            tmp = self.buf.ru16()
+                            record["msb"] = tmp >> 15
                             record["class"] = utils.unraw(
-                                self.buf.ru16(),
+                                tmp & 0x7fff,
                                 2,
                                 {0x0001: "Internet", 0x00fe: "NONE", 0x00ff: "ANY"},
                                 True,
@@ -2267,8 +2291,10 @@ class PcapNgModule(module.RuminantModule):
 
                             self.buf.sapunit()
                         case "SRV":
+                            tmp = self.buf.ru16()
+                            record["msb"] = tmp >> 15
                             record["class"] = utils.unraw(
-                                self.buf.ru16(),
+                                tmp & 0x7fff,
                                 2,
                                 {0x0001: "Internet", 0x00fe: "NONE", 0x00ff: "ANY"},
                                 True,
@@ -2286,8 +2312,10 @@ class PcapNgModule(module.RuminantModule):
 
                             self.buf.sapunit()
                         case "DS":
+                            tmp = self.buf.ru16()
+                            record["msb"] = tmp >> 15
                             record["class"] = utils.unraw(
-                                self.buf.ru16(),
+                                tmp & 0x7fff,
                                 2,
                                 {0x0001: "Internet", 0x00fe: "NONE", 0x00ff: "ANY"},
                                 True,
@@ -2305,8 +2333,10 @@ class PcapNgModule(module.RuminantModule):
 
                             self.buf.sapunit()
                         case "NSEC3":
+                            tmp = self.buf.ru16()
+                            record["msb"] = tmp >> 15
                             record["class"] = utils.unraw(
-                                self.buf.ru16(),
+                                tmp & 0x7fff,
                                 2,
                                 {0x0001: "Internet", 0x00fe: "NONE", 0x00ff: "ANY"},
                                 True,
@@ -2351,6 +2381,24 @@ class PcapNgModule(module.RuminantModule):
                                                 True,
                                             )
                                         )
+
+                            self.buf.sapunit()
+                        case "PTR":
+                            tmp = self.buf.ru16()
+                            record["msb"] = tmp >> 15
+                            record["class"] = utils.unraw(
+                                tmp & 0x7fff,
+                                2,
+                                {0x0001: "Internet", 0x00fe: "NONE", 0x00ff: "ANY"},
+                                True,
+                            )
+                            record["ttl"] = self.buf.ru32()
+                            record["rdata-length"] = self.buf.ru16()
+
+                            self.buf.pasunit(record["rdata-length"])
+
+                            record["rdata"] = {}
+                            record["rdata"]["target"] = dns_read_name(base, length)
 
                             self.buf.sapunit()
                         case _:
