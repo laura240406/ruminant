@@ -2186,6 +2186,16 @@ class PcapNgModule(module.RuminantModule):
                                         param["value"] = []
                                         while self.buf.hasunit():
                                             param["value"].append(self.buf.rs(self.buf.ru8()))
+                                    case "ipv4hint":
+                                        param["value"] = []
+                                        while self.buf.hasunit():
+                                            param["value"].append(".".join([str(self.buf.ru8()) for i in range(0, 4)]))
+                                    case "ipv6hint":
+                                        param["value"] = []
+                                        while self.buf.hasunit():
+                                            param["value"].append(ipaddress.IPv6Address(self.buf.read(16)).compressed)
+                                    case "ech":
+                                        param["value"] = self.read_ech_config_list()
                                     case _:
                                         param["value"] = self.buf.rh(param["length"])
                                         param["unknown"] = True
@@ -3216,6 +3226,48 @@ class PcapNgModule(module.RuminantModule):
                 packet["unknown"] = True
 
         return packet
+
+    def read_ech_config_list(self):
+        configs = {}
+        configs["length"] = self.buf.ru16()
+
+        self.buf.pasunit(configs["length"])
+
+        configs["entries"] = []
+        while self.buf.hasunit():
+            config = {}
+            config["version"] = self.buf.ru16()
+            config["length"] = self.buf.ru16()
+
+            self.buf.pasunit(config["length"])
+
+            config["config-id"] = self.buf.ru8()
+            config["kem-id"] = utils.unraw(self.buf.ru16(), 2, constants.IANA_HPKE_KEMS, True)
+            config["public-key"] = self.buf.rh(self.buf.ru16())
+
+            config["cipher-suites"] = []
+            self.buf.pasunit(self.buf.ru16())
+            print(self.buf.unit)
+
+            while self.buf.hasunit(4):
+                config["cipher-suites"].append({
+                    "kdf": utils.unraw(self.buf.ru16(), 2, constants.IANA_HPKE_KDFS, True),
+                    "aead": utils.unraw(self.buf.ru16(), 2, constants.IANA_HPKE_AEADS, True),
+                })
+
+            self.buf.sapunit()
+
+            config["maximum-name-length"] = self.buf.ru8()
+            config["public-name"] = self.buf.rs(self.buf.ru8())
+            config["extensions"] = self.buf.rh(self.buf.ru16())
+
+            self.buf.sapunit()
+
+            configs["entries"].append(config)
+
+        self.buf.sapunit()
+
+        return configs
 
     def try_reassemble(self, identifier):
         if identifier not in self.reassemble:

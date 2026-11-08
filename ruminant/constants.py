@@ -8455,3 +8455,43 @@ CTR_OTP_KEYS = {
     "PROD": (bytes.fromhex("06457901d485a367ac4f2ad01c53cf74"), bytes.fromhex("ba4f599b0ae1122c80e13f6865c4fa49")),
     "DEV": (bytes.fromhex("9cea656e96287bc18fd7d4bbd4587270"), bytes.fromhex("3e009afbb85f13627268757ce3b4becc")),
 }
+
+IANA_HPKE_KEMS = {
+    0x0000: "Reserved",
+    0x0010: "DHKEM(P-256, HKDF-SHA256)",
+    0x0011: "DHKEM(P-384, HKDF-SHA384)",
+    0x0012: "DHKEM(P-521, HKDF-SHA512)",
+    0x0013: "DHKEM(CP-256, HKDF-SHA256)",
+    0x0014: "DHKEM(CP-384, HKDF-SHA384)",
+    0x0015: "DHKEM(CP-521, HKDF-SHA512)",
+    0x0016: "DHKEM(secp256k1, HKDF-SHA256)",
+    0x0020: "DHKEM(X25519, HKDF-SHA256)",
+    0x0021: "DHKEM(X448, HKDF-SHA512)",
+    0x0022: "DHKEM(X25519+Elligator, HKDF-SHA256)",
+    0x0030: "X25519Kyber768Draft00",
+    0x0040: "ML-KEM-512",
+    0x0041: "ML-KEM-768",
+    0x0042: "ML-KEM-1024",
+    0x0050: "MLKEM768-P256",
+    0x0051: "MLKEM1024-P384",
+    0x647a: "X-Wing",
+}
+
+IANA_HPKE_KDFS = {
+    0x0000: "Reserved",
+    0x0001: "HKDF-SHA256",
+    0x0002: "HKDF-SHA384",
+    0x0003: "HKDF-SHA512",
+    0x0010: "SHAKE128",
+    0x0011: "SHAKE256",
+    0x0012: "TurboSHAKE128",
+    0x0013: "TurboSHAKE256",
+}
+
+IANA_HPKE_AEADS = {
+    0x0000: "Reserved",
+    0x0001: "AES-128-GCM",
+    0x0002: "AES-256-GCM",
+    0x0003: "ChaCha20Poly1305",
+    0xffff: "Export-only",
+}
