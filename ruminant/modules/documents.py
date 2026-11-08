@@ -366,7 +366,10 @@ class PdfModule(module.RuminantModule):
                                 obj["data"] = chew(buf)
 
                         buf = old_buf
-                except Exception:
+                except Exception as e:
+                    if module.debug:
+                        raise e
+
                     obj["error"] = True
 
         if packed is None:
@@ -410,7 +413,6 @@ class PdfModule(module.RuminantModule):
                 d += buf.read(2)
 
                 if level == 0:
-                    d += buf.read(1)
                     break
             elif buf.peek(1) == b"[":
                 level += 1
@@ -420,7 +422,6 @@ class PdfModule(module.RuminantModule):
                 d += buf.read(1)
 
                 if level == 0:
-                    d += buf.read(1)
                     break
             else:
                 d += buf.read(1)
