@@ -1085,6 +1085,10 @@ class JPEGModule(module.RuminantModule):
             elif typ == 0xe2 and self.buf.peek(27) == b"urn:iso:std:iso:ts:21496:-1":
                 self.buf.skip(32)
                 chunk["data"]["hdr-gainmap-length"] = self.buf.unit
+            elif typ == 0xe4 and self.buf.peek(16) == b"XIAOMI_CUSTOMIZE":
+                self.buf.skip(16)
+                chunk["data"]["version"] = self.buf.ru16()
+                chunk["data"]["json"] = self.buf.rs(self.buf.ru16())
             elif typ == 0xea and self.buf.peek(4) == b"AROT":
                 self.buf.skip(6)
                 chunk["data"]["entry-count"] = self.buf.ru32()
