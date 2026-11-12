@@ -2091,9 +2091,9 @@ def read_bson(buf: Buf) -> ruminant_types.JSON:
     return objects
 
 
-def b45decode(encoded_str: str) -> bytes:
+def b45decode(encoded_str: bytes) -> bytes:
     BASE45_CHARSET = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ $%*+-./:"
-    CHAR_MAP = {ord(char): idx for idx, char in enumerate(BASE45_CHARSET)}
+    CHAR_MAP: dict[int, int] = {ord(char): idx for idx, char in enumerate(BASE45_CHARSET)}
 
     res = bytearray()
     i = 0
@@ -2102,8 +2102,8 @@ def b45decode(encoded_str: str) -> bytes:
     while i < length:
         if i + 3 <= length:
             c1 = CHAR_MAP[encoded_str[i]]
-            c2 = CHAR_MAP[encoded_str[i+1]]
-            c3 = CHAR_MAP[encoded_str[i+2]]
+            c2 = CHAR_MAP[encoded_str[i + 1]]
+            c3 = CHAR_MAP[encoded_str[i + 2]]
 
             value = c1 + (c2 * 45) + (c3 * 45 * 45)
             if value > 65535:
@@ -2114,7 +2114,7 @@ def b45decode(encoded_str: str) -> bytes:
             i += 3
         elif i + 2 <= length:
             c1 = CHAR_MAP[encoded_str[i]]
-            c2 = CHAR_MAP[encoded_str[i+1]]
+            c2 = CHAR_MAP[encoded_str[i + 1]]
 
             value = c1 + (c2 * 45)
             if value > 255:
