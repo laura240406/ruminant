@@ -2335,3 +2335,21 @@ class TptSaveModule(module.RuminantModule):
         meta["inner"] = utils.read_bson(buf)
 
         return meta
+
+
+@module.register
+class EUDCCModule(module.RuminantModule):
+    desc = "EU Digital COVID Certificate contents."
+
+    @staticmethod
+    def identify(buf: Buf, ctx={}) -> bool:
+        return buf.peek(4) == b"HC1:"
+
+    def chew(self) -> ruminant_types.JSON:
+        meta: dict = {}
+        meta["type"] = "eudcc"
+
+        self.buf.skip(4)
+        meta["content"] = utils.read_cbor(Buf(zlib.decompress(utils.b45decode(self.buf.readline().strip()))))
+
+        return meta
