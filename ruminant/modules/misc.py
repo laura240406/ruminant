@@ -2353,3 +2353,39 @@ class EUDCCModule(module.RuminantModule):
         meta["content"] = utils.read_cbor(Buf(zlib.decompress(utils.b45decode(self.buf.readline().strip()))))
 
         return meta
+
+
+@module.register
+class CTIEModule(module.RuminantModule):
+    desc = "CTIE COVID Certificate contents."
+
+    @staticmethod
+    def identify(buf: Buf, ctx={}) -> bool:
+        return buf.peek(7) == b"CTIE://"
+
+    def chew(self) -> ruminant_types.JSON:
+        meta: dict = {}
+        meta["type"] = "ctie"
+
+        self.buf.skip(7)
+
+        content = base64.b64decode(self.buf.rl()).decode().strip().split("\n")
+        meta["msvac-id"] = content[0][5:33]
+
+        text = content[0][33:]
+        rest = ""
+        while True:
+            try:
+                assert not ("=" in text and text[-1] != "=")
+
+                sig = Buf(base64.b64decode(text))
+                break
+            except Exception:
+                rest = text[-1] + rest
+                text = text[:-1]
+
+        meta["sig"] = utils.read_der(sig)
+        meta["certificate-name"] = rest
+        meta["claims"] = "\n".join(content[1:]).split("&&")
+
+        return meta

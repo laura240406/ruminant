@@ -126,7 +126,7 @@ Ruminant is still in early alpha but it can already process the following file t
 * 3DS firmware files
 * 3DS OTP dumps
 * The Powder Toy saves and stamps
-* Contents of EU Digital COVID Certificate QR codes
+* Contents of EU Digital and CTIE COVID Certificate QR codes
 
 ## Video codecs
 Ruminant can extract and parse data units of specific codecs from specific containers.
