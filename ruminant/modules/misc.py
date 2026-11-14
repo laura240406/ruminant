@@ -2700,10 +2700,10 @@ class BitcoinBlockModule(module.RuminantModule):
             script["type"] = "coinbase"
             script["parsed"] = {}
             script["parsed"]["height-or-difficulty"] = int.from_bytes(bytes.fromhex(ops[0][1:-1]), "little")
-            script["parsed"]["extra-nonce"] = [int.from_bytes(bytes.fromhex(op[1:-1]), "little") for op in ops[1:-1]]
+            script["parsed"]["extra-nonces"] = []
 
-            if len(ops) > 2:
-                script["parsed"]["text"] = utils.decode(bytes.fromhex(ops[-1][1:-1]))
+            for op in ops[1:]:
+                script["parsed"]["extra-nonces"].append(utils.decode(bytes.fromhex(op[1:-1])))
         elif not is_coinbase and len(ops) == 2 and ops[0][0] == "<" and ops[1] == "OP_CHECKSIG":
             script["type"] = "p2pk"
             script["parsed"] = {}
