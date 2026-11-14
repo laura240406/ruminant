@@ -19,7 +19,7 @@ except ModuleNotFoundError:
 
 # remove limits so we can process big files
 sys.set_int_max_str_digits(0)
-sys.setrecursionlimit(1000000)
+sys.setrecursionlimit(1000000000)
 
 # tqdm installed?
 has_tqdm = False
