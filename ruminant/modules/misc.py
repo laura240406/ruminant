@@ -2721,7 +2721,7 @@ class BitcoinBlockModule(module.RuminantModule):
             script["parsed"] = {}
             script["parsed"]["public-key-hash"] = ops[2][1:-1]
             script["parsed"]["public-key"] = utils.b58check_encode(b"\x00" + bytes.fromhex(ops[2][1:-1]))
-        elif not is_coinbase and len(ops) == 2 and len(ops[1]) in (68, 131) and ops[0][:3] == "<30":
+        elif not is_coinbase and len(ops) == 2 and len(ops[1]) in (68, 132) and ops[0][:3] == "<30":
             script["type"] = "p2pkh-sig"
             script["parsed"] = {}
             script["public-key"] = utils.read_der(Buf(bytes.fromhex(ops[0][1:-1])))
