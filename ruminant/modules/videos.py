@@ -3205,7 +3205,7 @@ class OggModule(module.RuminantModule):
 @module.register
 class MpegTsModule(module.RuminantModule):
     desc = "MPEG transport stream files like the ones served on the web by M3U8 playlists."
-    priority = 1
+    priority = 2
 
     @staticmethod
     def identify(buf: Buf, ctx={}) -> bool:

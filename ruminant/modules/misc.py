@@ -2248,6 +2248,7 @@ class CtrFirmModule(module.RuminantModule):
 @module.register
 class CtrOtpModule(module.RuminantModule):
     desc = "3DS OTP files."
+    priority = 1
 
     @staticmethod
     def identify(buf: Buf, ctx={}) -> bool:
