@@ -25,6 +25,7 @@ import json
 import tempfile
 import re
 import lzma
+import hashlib
 from typing import Any, cast, BinaryIO
 
 
@@ -2126,3 +2127,26 @@ def b45decode(encoded_str: bytes) -> bytes:
             raise ValueError("Malformed Base45 string: leftover trailing character")
 
     return bytes(res)
+
+
+def b58encode(b: bytes) -> str:
+    BASE58_ALPHABET = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"
+
+    n_pad = 0
+    for byte in b:
+        if byte == 0:
+            n_pad += 1
+        else:
+            break
+
+    n = int.from_bytes(b, "big")
+    res = []
+    while n > 0:
+        n, remainder = divmod(n, 58)
+        res.append(BASE58_ALPHABET[remainder])
+
+    return BASE58_ALPHABET[0] * n_pad + "".join(res[::-1])
+
+
+def b58check_encode(payload: bytes) -> str:
+    return b58encode(payload + hashlib.sha256(hashlib.sha256(payload).digest()).digest()[:4])

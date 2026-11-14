@@ -1,5 +1,5 @@
 from .. import module, utils, constants, ruminant_types, crypto
-from ..buf import Buf
+from ..buf import Buf, UnitException
 from . import chew
 import tempfile
 import sqlite3
@@ -2387,5 +2387,376 @@ class CTIEModule(module.RuminantModule):
         meta["sig"] = utils.read_der(sig)
         meta["certificate-name"] = rest
         meta["claims"] = "\n".join(content[1:]).split("&&")
+
+        return meta
+
+
+@module.register
+class BitcoinBlockModule(module.RuminantModule):
+    desc = "Bitcoin block files. Run your node with blocksxor=0 or decrypt manually."
+
+    @staticmethod
+    def identify(buf: Buf, ctx={}) -> bool:
+        return buf.peek(4) == b"\xf9\xbe\xb4\xd9"
+
+    def read_cpi(self) -> int:
+        tmp = self.buf.ru8()
+
+        match tmp:
+            case 0xfd:
+                return self.buf.ru16l()
+            case 0xfe:
+                return self.buf.ru32l()
+            case 0xff:
+                return self.buf.ru64l()
+            case _:
+                return tmp
+
+    def read_tx(self, is_coinbase) -> ruminant_types.JSON:
+        tx: dict = {}
+
+        base = self.buf.tell()
+
+        tx["length"] = None
+        tx["id"] = None
+        tx["version"] = self.buf.ru32l()
+        if self.buf.pu8() == 0:
+            tx["segwit"] = True
+            self.buf.skip(2)
+
+        tx["input-count"] = self.read_cpi()
+        tx["inputs"] = []
+        for i in range(0, tx["input-count"]):
+            inpt: dict = {}
+            inpt["txid"] = self.buf.read(32)[::-1].hex()
+            inpt["vout"] = self.buf.ri32l()
+            inpt["scriptsig-length"] = self.read_cpi()
+            inpt["scriptsig"] = self.disassemble_script(self.buf.read(inpt["scriptsig-length"]), is_coinbase)
+            inpt["sequence"] = self.buf.ri32l()
+
+            tx["inputs"].append(inpt)
+
+        tx["output-count"] = self.read_cpi()
+        tx["outputs"] = []
+        for i in range(0, tx["output-count"]):
+            output: dict = {}
+            output["value"] = self.buf.ru64l()
+            output["scriptpubkey-length"] = self.read_cpi()
+            output["scriptpubkey"] = self.disassemble_script(self.buf.read(output["scriptpubkey-length"]), False)
+
+            tx["outputs"].append(output)
+
+        if tx.get("segwit"):
+            for inpt in tx["inputs"]:
+                inpt["segwit-stack-size"] = self.read_cpi()
+
+                inpt["segwit-stack"] = []
+                for i in range(0, inpt["segwit-stack-size"]):
+                    inpt["segwit-stack"].append(self.buf.rh(self.read_cpi()))
+
+        tx["locktime"] = self.buf.ru32l()
+
+        with self.buf:
+            length = self.buf.tell() - base
+            tx["length"] = length
+            self.buf.seek(base)
+            self.buf.resetunit()
+
+            tx["id"] = hashlib.sha256(hashlib.sha256(self.buf.read(length)).digest()).digest()[::-1].hex()
+
+        return tx
+
+    def unpack_key(self, key: bytes) -> dict:
+        if key[0] == 0x02:
+            return {"type": "uncompressed", "x": int.from_bytes(key[1:33]), "y": "even"}
+        elif key[0] == 0x03:
+            return {"type": "uncompressed", "x": int.from_bytes(key[1:33]), "y": "odd"}
+        elif key[0] == 0x04:
+            return {
+                "type": "uncompressed",
+                "x": int.from_bytes(key[1:33]),
+                "y": int.from_bytes(key[33:]),
+            }
+        else:
+            raise ValueError(f"Unknown key format {key[0]}")
+
+    def disassemble_script(self, scr: bytes, is_coinbase: bool) -> dict:
+        ops: list = []
+        buf = Buf(scr)
+
+        while buf.available():
+            try:
+                op = buf.ru8()
+
+                match op:
+                    case 0x00:
+                        ops.append("OP_0")
+                    case 0x4c:
+                        ops.append("<" + buf.rh(buf.ru8()) + ">")
+                    case 0x4d:
+                        ops.append("<" + buf.rh(buf.ru16l()) + ">")
+                    case 0x4e:
+                        ops.append("<" + buf.rh(buf.ru32l()) + ">")
+                    case 0x4f:
+                        ops.append("OP_1NEGATE")
+                    case 0x50:
+                        ops.append("OP_RESERVED")
+                    case 0x51:
+                        ops.append("OP_1")
+                    case 0x61:
+                        ops.append("OP_NOP")
+                    case 0x62:
+                        ops.append("OP_VER")
+                    case 0x63:
+                        ops.append("OP_IF")
+                    case 0x64:
+                        ops.append("OP_NOTIF")
+                    case 0x65:
+                        ops.append("OP_VERIF")
+                    case 0x66:
+                        ops.append("OP_VERNOTIF")
+                    case 0x67:
+                        ops.append("OP_ELSE")
+                    case 0x68:
+                        ops.append("OP_ENDIF")
+                    case 0x69:
+                        ops.append("OP_VERIFY")
+                    case 0x6a:
+                        ops.append("OP_RETURN")
+                    case 0x6b:
+                        ops.append("OP_TOALTSTACK")
+                    case 0x6c:
+                        ops.append("OP_FROMALTSTACK")
+                    case 0x6d:
+                        ops.append("OP_2DROP")
+                    case 0x6e:
+                        ops.append("OP_2DUP")
+                    case 0x6f:
+                        ops.append("OP_3DUP")
+                    case 0x70:
+                        ops.append("OP_2OVER")
+                    case 0x71:
+                        ops.append("OP_2ROT")
+                    case 0x72:
+                        ops.append("OP_2SWAP")
+                    case 0x73:
+                        ops.append("OP_IFDUP")
+                    case 0x74:
+                        ops.append("OP_DEPTH")
+                    case 0x75:
+                        ops.append("OP_DROP")
+                    case 0x76:
+                        ops.append("OP_DUP")
+                    case 0x77:
+                        ops.append("OP_NIP")
+                    case 0x78:
+                        ops.append("OP_OVER")
+                    case 0x79:
+                        ops.append("OP_PICK")
+                    case 0x7a:
+                        ops.append("OP_ROLL")
+                    case 0x7b:
+                        ops.append("OP_ROT")
+                    case 0x7c:
+                        ops.append("OP_SWAP")
+                    case 0x7d:
+                        ops.append("OP_TUCK")
+                    case 0x7e:
+                        ops.append("OP_CAT")
+                    case 0x7f:
+                        ops.append("OP_SUBSTR")
+                    case 0x80:
+                        ops.append("OP_LEFT")
+                    case 0x81:
+                        ops.append("OP_RIGHT")
+                    case 0x82:
+                        ops.append("OP_SIZE")
+                    case 0x83:
+                        ops.append("OP_INVERT")
+                    case 0x84:
+                        ops.append("OP_AND")
+                    case 0x85:
+                        ops.append("OP_OR")
+                    case 0x86:
+                        ops.append("OP_XOR")
+                    case 0x87:
+                        ops.append("OP_EQUAL")
+                    case 0x88:
+                        ops.append("OP_EQUALVERIFY")
+                    case 0x89:
+                        ops.append("OP_RESERVED1")
+                    case 0x8a:
+                        ops.append("OP_RESERVED2")
+                    case 0x8b:
+                        ops.append("OP_1ADD")
+                    case 0x8c:
+                        ops.append("OP_1SUB")
+                    case 0x8d:
+                        ops.append("OP_2MUL")
+                    case 0x8e:
+                        ops.append("OP_2DIV")
+                    case 0x8f:
+                        ops.append("OP_NEGATE")
+                    case 0x90:
+                        ops.append("OP_ABS")
+                    case 0x91:
+                        ops.append("OP_NOT")
+                    case 0x92:
+                        ops.append("OP_0NOTEQUAL")
+                    case 0x93:
+                        ops.append("OP_ADD")
+                    case 0x94:
+                        ops.append("OP_SUB")
+                    case 0x95:
+                        ops.append("OP_MUL")
+                    case 0x96:
+                        ops.append("OP_DIV")
+                    case 0x97:
+                        ops.append("OP_MOD")
+                    case 0x98:
+                        ops.append("OP_LSHIFT")
+                    case 0x99:
+                        ops.append("OP_RSHIFT")
+                    case 0x9a:
+                        ops.append("OP_BOOLAND")
+                    case 0x9b:
+                        ops.append("OP_BOOLOR")
+                    case 0x9c:
+                        ops.append("OP_NUMEQUAL")
+                    case 0x9d:
+                        ops.append("OP_NUMEQUALVERIFY")
+                    case 0x9e:
+                        ops.append("OP_NUMNOTEQUAL")
+                    case 0x9f:
+                        ops.append("OP_LESSTHAN")
+                    case 0xa0:
+                        ops.append("OP_GREATERTHAN")
+                    case 0xa1:
+                        ops.append("OP_LESSTHANOREQUAL")
+                    case 0xa2:
+                        ops.append("OP_GREATERTHANOREQUAL")
+                    case 0xa3:
+                        ops.append("OP_MIN")
+                    case 0xa4:
+                        ops.append("OP_MAX")
+                    case 0xa5:
+                        ops.append("OP_WITHIN")
+                    case 0xa6:
+                        ops.append("OP_RIPEMD160")
+                    case 0xa7:
+                        ops.append("OP_SHA1")
+                    case 0xa8:
+                        ops.append("OP_SHA256")
+                    case 0xa9:
+                        ops.append("OP_HASH160")
+                    case 0xaa:
+                        ops.append("OP_HASH256")
+                    case 0xab:
+                        ops.append("OP_CODESEPARATOR")
+                    case 0xac:
+                        ops.append("OP_CHECKSIG")
+                    case 0xad:
+                        ops.append("OP_CHECKSIGVERIFY")
+                    case 0xae:
+                        ops.append("OP_CHECKMULTISIG")
+                    case 0xaf:
+                        ops.append("OP_CHECKMULTISIGVERIFY")
+                    case 0xb0:
+                        ops.append("OP_NOP1")
+                    case 0xb1:
+                        ops.append("OP_CHECKLOCKTIMEVERIFY")
+                    case 0xb2:
+                        ops.append("OP_CHECKSEQUENCEVERIFY")
+                    case 0xb3:
+                        ops.append("OP_NOP4")
+                    case 0xb4:
+                        ops.append("OP_NOP5")
+                    case 0xb5:
+                        ops.append("OP_NOP6")
+                    case 0xb6:
+                        ops.append("OP_NOP7")
+                    case 0xb7:
+                        ops.append("OP_NOP8")
+                    case 0xb8:
+                        ops.append("OP_NOP9")
+                    case 0xb9:
+                        ops.append("OP_NOP10")
+                    case 0xba:
+                        ops.append("OP_CHECKSIGADD")
+                    case _:
+                        if op >= 0x01 and op <= 0x4b:
+                            ops.append("<" + buf.rh(op) + ">")
+                        else:
+                            ops.append("UNK_" + hex(op)[2:].zfill(2))
+            except UnitException:
+                ops.append("ERROR")
+
+        script: dict = {}
+        script["raw"] = ops
+
+        if is_coinbase and len(ops) >= 2 and all([op[0] == "<" for op in ops]):
+            script["type"] = "coinbase"
+            script["parsed"] = {}
+            script["parsed"]["height-or-difficulty"] = int.from_bytes(bytes.fromhex(ops[0][1:-1]), "little")
+            script["parsed"]["extra-nonce"] = [int.from_bytes(bytes.fromhex(op[1:-1]), "little") for op in ops[1:-1]]
+
+            if len(ops) > 2:
+                script["parsed"]["text"] = utils.decode(bytes.fromhex(ops[-1][1:-1]))
+        elif not is_coinbase and len(ops) == 2 and ops[0][0] == "<" and ops[1] == "OP_CHECKSIG":
+            script["type"] = "p2pk"
+            script["parsed"] = {}
+            script["parsed"]["pubkey"] = self.unpack_key(bytes.fromhex(ops[0][1:-1]))
+        elif (
+            not is_coinbase
+            and len(ops) == 5
+            and ops[0] == "OP_DUP"
+            and ops[1] == "OP_HASH160"
+            and ops[2][0] == "<"
+            and ops[3] == "OP_EQUALVERIFY"
+            and ops[4] == "OP_CHECKSIG"
+        ):
+            script["type"] = "p2pkh"
+            script["parsed"] = {}
+            script["parsed"]["public-key-hash"] = ops[2][1:-1]
+            script["parsed"]["public-key"] = utils.b58check_encode(b"\x00" + bytes.fromhex(ops[2][1:-1]))
+        elif not is_coinbase and len(ops) == 2 and len(ops[1]) in (68, 131) and ops[0][:3] == "<30":
+            script["type"] = "p2pkh-sig"
+            script["parsed"] = {}
+            script["public-key"] = utils.read_der(Buf(bytes.fromhex(ops[0][1:-1])))
+            script["signature"] = self.unpack_key(bytes.fromhex(ops[1][1:-1]))
+
+        return script
+
+    def chew(self) -> ruminant_types.JSON:
+        meta: dict = {}
+        meta["type"] = "bitcoin-block"
+
+        self.buf.skip(4)
+
+        meta["length"] = self.buf.ru32l()
+        self.buf.pasunit(meta["length"])
+
+        hdr = self.buf.peek(80)
+
+        meta["header"] = {}
+        meta["header"]["version"] = self.buf.ru32l()
+        meta["header"]["prev-hash"] = self.buf.read(32)[::-1].hex()
+        meta["header"]["merkle-root"] = self.buf.read(32)[::-1].hex()
+        meta["header"]["timestamp"] = utils.unix_to_date(self.buf.ru32l())
+        mantissa = self.buf.ru24l()
+        meta["header"]["difficulty"] = (mantissa << (8 * (self.buf.ru8() - 3))).to_bytes(32, "big").hex()
+        meta["header"]["nonce"] = self.buf.ru32l()
+
+        meta["header"]["id"] = hashlib.sha256(hashlib.sha256(hdr).digest()).digest()[::-1].hex()
+        meta["header"]["is-below-difficulty"] = int.from_bytes(
+            hashlib.sha256(hashlib.sha256(hdr).digest()).digest(), "little"
+        ) < int(meta["header"]["difficulty"], 16)
+
+        meta["transaction-count"] = self.read_cpi()
+        meta["transactions"] = []
+        for i in range(0, meta["transaction-count"]):
+            meta["transactions"].append(self.read_tx(i == 0))
+
+        self.buf.sapunit()
 
         return meta
