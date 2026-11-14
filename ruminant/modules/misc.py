@@ -2691,6 +2691,7 @@ class BitcoinBlockModule(module.RuminantModule):
                             ops.append("UNK_" + hex(op)[2:].zfill(2))
             except UnitException:
                 ops.append("ERROR")
+                break
 
         script: dict = {}
         script["raw"] = ops
