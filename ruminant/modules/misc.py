@@ -2834,6 +2834,60 @@ class BitcoinBlockModule(module.RuminantModule):
             script["parsed"] = {}
             script["parsed"]["script-hash"] = ops[1][1:-1]
             script["parsed"]["address"] = utils.b58check_encode(b"\x05" + bytes.fromhex(ops[1][1:-1]))
+        elif (
+            len(ops) >= 5
+            and ops[1] == "OP_CHECKSIG"
+            and ops[2] == "OP_0"
+            and ops[3] == "OP_IF"
+            and ops[4] == "<6f7264>"
+            and ops[-1] == "OP_ENDIF"
+        ):
+            script["type"] = "ordinal"
+            script["parsed"] = {}
+            ops = ops[5:-1]
+
+            metadata = b""
+            script["parsed"]["tags"] = []
+            while len(ops) >= 2:
+                typ = ops[0]
+                if typ == "OP_0":
+                    ops = ops[1:]
+                    break
+
+                if ops[1].startswith("OP_"):
+                    data = bytes([int(ops[1][3:])])
+                else:
+                    data = bytes.fromhex(ops[1][1:-1])
+                ops = ops[2:]
+
+                # https://docs.ordinals.com/inscriptions.html
+                match typ:
+                    case "<01>" | "OP_1":
+                        script["parsed"]["tags"].append({"type": "content-type", "value": utils.decode(data)})
+                    case "<02>" | "OP_2":
+                        script["parsed"]["tags"].append({"type": "pointer", "index": int.from_bytes(data, "little")})
+                    case "<03>" | "OP_3":
+                        script["parsed"]["tags"].append({
+                            "type": "parent",
+                            "txid": data[:32][::-1].hex(),
+                            "index": int.from_bytes(data[32:], "little"),
+                        })
+                    case "<05>" | "OP_5":
+                        metadata += data
+                    case "<0d>" | "OP_13":
+                        script["parsed"]["tags"].append({"type": "rune", "payload": data.hex()})
+                    case _:
+                        script["parsed"]["tags"].append({"type": f"Unknown ({typ})", "payload": data.hex()})
+
+            if len(metadata):
+                script["parsed"]["tags"].append({"type": "metadata", "cbor": utils.read_cbor(Buf(metadata))})
+
+            body = b""
+            if len(ops):
+                for op in ops:
+                    body += bytes.fromhex(op[1:-1])
+
+                script["parsed"]["body"] = chew(body)
         elif len(ops) == 0 and len(segwit_stack) > 0:
             if len(segwit_stack) == 2 and len(segwit_stack[1]) == 66:
                 script["type"] = "p2wpkh-sig"
