@@ -2757,7 +2757,9 @@ class BitcoinBlockModule(module.RuminantModule):
 
             for op in ops[1:]:
                 script["parsed"]["extra-nonces"].append(utils.decode(bytes.fromhex(op[1:-1])))
-        elif not is_coinbase and not is_input and len(ops) == 2 and ops[0][0] == "<" and ops[1] == "OP_CHECKSIG":
+        elif (
+            not is_coinbase and not is_input and not taproot and len(ops) == 2 and ops[0][0] == "<" and ops[1] == "OP_CHECKSIG"
+        ):
             script["type"] = "p2pk"
             script["parsed"] = {}
             script["parsed"]["pubkey"] = self.unpack_key(bytes.fromhex(ops[0][1:-1]))
@@ -2848,7 +2850,7 @@ class BitcoinBlockModule(module.RuminantModule):
         ):
             script["type"] = "ordinal"
             script["parsed"] = {}
-            ops = ops[5:-1]
+            ops = ops[5:]
 
             metadata = b""
             script["parsed"]["tags"] = []
@@ -2889,6 +2891,9 @@ class BitcoinBlockModule(module.RuminantModule):
             body = b""
             if len(ops):
                 for op in ops:
+                    if not op.startswith("<"):
+                        break
+
                     body += bytes.fromhex(op[1:-1])
 
                 script["parsed"]["body"] = chew(body)
