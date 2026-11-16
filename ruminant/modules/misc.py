@@ -2927,7 +2927,10 @@ class BitcoinBlockModule(module.RuminantModule):
             elif (
                 len(segwit_stack) >= 2
                 and len(segwit_stack[-1]) >= 66
-                and (len(segwit_stack[-1]) % 64 == 2 or (segwit_stack[-1][0] == 0x50 and len(segwit_stack[-2]) % 64 == 2))
+                and (
+                    (len(segwit_stack[-1]) % 64 == 2 and segwit_stack[-1][0] == "c")
+                    or (segwit_stack[-1][0] == 0x50 and len(segwit_stack[-2]) % 64 == 2 and segwit_stack[-2][0] == "c")
+                )
             ):
                 script["type"] = "p2tr-script-sig"
                 script["parsed"] = {}
