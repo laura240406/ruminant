@@ -2419,7 +2419,8 @@ class BitcoinBlockModule(module.RuminantModule):
         base = self.buf.tell()
 
         tx["length"] = None
-        tx["id"] = None
+        tx["txid"] = None
+        tx["wtxid"] = None
         tx["version"] = self.buf.ru32l()
         if self.buf.pu8() == 0:
             tx["segwit"] = True
@@ -2432,7 +2433,7 @@ class BitcoinBlockModule(module.RuminantModule):
             inpt["txid"] = self.buf.read(32)[::-1].hex()
             inpt["vout"] = self.buf.ri32l()
             inpt["scriptsig-length"] = self.read_cpi()
-            inpt["scriptsig"] = self.disassemble_script(self.buf.read(inpt["scriptsig-length"]), is_coinbase)
+            inpt["scriptsig"] = self.buf.read(inpt["scriptsig-length"])
             inpt["sequence"] = self.buf.ri32l()
 
             tx["inputs"].append(inpt)
@@ -2443,9 +2444,11 @@ class BitcoinBlockModule(module.RuminantModule):
             output: dict = {}
             output["value"] = self.buf.ru64l()
             output["scriptpubkey-length"] = self.read_cpi()
-            output["scriptpubkey"] = self.disassemble_script(self.buf.read(output["scriptpubkey-length"]), False)
+            output["scriptpubkey"] = self.disassemble_script(self.buf.read(output["scriptpubkey-length"]), False, False, [])
 
             tx["outputs"].append(output)
+
+        wit_offset = self.buf.tell()
 
         if tx.get("segwit"):
             for inpt in tx["inputs"]:
@@ -2455,6 +2458,11 @@ class BitcoinBlockModule(module.RuminantModule):
                 for i in range(0, inpt["segwit-stack-size"]):
                     inpt["segwit-stack"].append(self.buf.rh(self.read_cpi()))
 
+                inpt["scriptsig"] = self.disassemble_script(inpt["scriptsig"], is_coinbase, True, inpt["segwit-stack"])
+        else:
+            for inpt in tx["inputs"]:
+                inpt["scriptsig"] = self.disassemble_script(inpt["scriptsig"], is_coinbase, True, [])
+
         tx["locktime"] = self.buf.ru32l()
 
         with self.buf:
@@ -2463,15 +2471,24 @@ class BitcoinBlockModule(module.RuminantModule):
             self.buf.seek(base)
             self.buf.resetunit()
 
-            tx["id"] = hashlib.sha256(hashlib.sha256(self.buf.read(length)).digest()).digest()[::-1].hex()
+            tx["txid"] = (
+                hashlib
+                .sha256(hashlib.sha256(self.buf.read(wit_offset - base) + tx["locktime"].to_bytes(4, "little")).digest())
+                .digest()[::-1]
+                .hex()
+            )
+
+            self.buf.seek(base)
+            self.buf.resetunit()
+            tx["wtxid"] = hashlib.sha256(hashlib.sha256(self.buf.read(length)).digest()).digest()[::-1].hex()
 
         return tx
 
     def unpack_key(self, key: bytes) -> dict:
         if key[0] == 0x02:
-            return {"type": "uncompressed", "x": int.from_bytes(key[1:33]), "y": "even"}
+            return {"type": "compressed", "x": int.from_bytes(key[1:33]), "y": "even"}
         elif key[0] == 0x03:
-            return {"type": "uncompressed", "x": int.from_bytes(key[1:33]), "y": "odd"}
+            return {"type": "compressed", "x": int.from_bytes(key[1:33]), "y": "odd"}
         elif key[0] == 0x04:
             return {
                 "type": "uncompressed",
@@ -2481,7 +2498,9 @@ class BitcoinBlockModule(module.RuminantModule):
         else:
             raise ValueError(f"Unknown key format {key[0]}")
 
-    def disassemble_script(self, scr: bytes, is_coinbase: bool) -> dict:
+    def disassemble_script(
+        self, scr: bytes, is_coinbase: bool, is_input: bool, segwit_stack: list[str], taproot: bool = False
+    ) -> dict:
         ops: list = []
         buf = Buf(scr)
 
@@ -2504,6 +2523,36 @@ class BitcoinBlockModule(module.RuminantModule):
                         ops.append("OP_RESERVED")
                     case 0x51:
                         ops.append("OP_1")
+                    case 0x52:
+                        ops.append("OP_2")
+                    case 0x53:
+                        ops.append("OP_3")
+                    case 0x54:
+                        ops.append("OP_4")
+                    case 0x55:
+                        ops.append("OP_5")
+                    case 0x56:
+                        ops.append("OP_6")
+                    case 0x57:
+                        ops.append("OP_7")
+                    case 0x58:
+                        ops.append("OP_8")
+                    case 0x59:
+                        ops.append("OP_9")
+                    case 0x5a:
+                        ops.append("OP_10")
+                    case 0x5b:
+                        ops.append("OP_11")
+                    case 0x5c:
+                        ops.append("OP_12")
+                    case 0x5d:
+                        ops.append("OP_13")
+                    case 0x5e:
+                        ops.append("OP_14")
+                    case 0x5f:
+                        ops.append("OP_15")
+                    case 0x60:
+                        ops.append("OP_16")
                     case 0x61:
                         ops.append("OP_NOP")
                     case 0x62:
@@ -2704,12 +2753,13 @@ class BitcoinBlockModule(module.RuminantModule):
 
             for op in ops[1:]:
                 script["parsed"]["extra-nonces"].append(utils.decode(bytes.fromhex(op[1:-1])))
-        elif not is_coinbase and len(ops) == 2 and ops[0][0] == "<" and ops[1] == "OP_CHECKSIG":
+        elif not is_coinbase and not is_input and len(ops) == 2 and ops[0][0] == "<" and ops[1] == "OP_CHECKSIG":
             script["type"] = "p2pk"
             script["parsed"] = {}
             script["parsed"]["pubkey"] = self.unpack_key(bytes.fromhex(ops[0][1:-1]))
         elif (
             not is_coinbase
+            and not is_input
             and len(ops) == 5
             and ops[0] == "OP_DUP"
             and ops[1] == "OP_HASH160"
@@ -2720,12 +2770,121 @@ class BitcoinBlockModule(module.RuminantModule):
             script["type"] = "p2pkh"
             script["parsed"] = {}
             script["parsed"]["public-key-hash"] = ops[2][1:-1]
-            script["parsed"]["public-key"] = utils.b58check_encode(b"\x00" + bytes.fromhex(ops[2][1:-1]))
-        elif not is_coinbase and len(ops) == 2 and len(ops[1]) in (68, 132) and ops[0][:3] == "<30":
+            script["parsed"]["address"] = utils.b58check_encode(b"\x00" + bytes.fromhex(ops[2][1:-1]))
+        elif not is_coinbase and is_input and len(ops) == 2 and len(ops[1]) in (68, 132) and ops[0][:3] == "<30":
             script["type"] = "p2pkh-sig"
             script["parsed"] = {}
-            script["public-key"] = utils.read_der(Buf(bytes.fromhex(ops[0][1:-1])))
-            script["signature"] = self.unpack_key(bytes.fromhex(ops[1][1:-1]))
+            script["parsed"]["public-key"] = utils.read_der(Buf(bytes.fromhex(ops[0][1:-1])))
+            script["parsed"]["signature"] = self.unpack_key(bytes.fromhex(ops[1][1:-1]))
+        elif not is_input and len(ops) == 6 and ops[0] == "OP_2" and ops[4] == "OP_3" and ops[5] == "OP_CHECKMULTISIG":
+            script["type"] = "2/3-multisig"
+            script["parsed"] = {}
+            script["parsed"]["keys"] = [
+                self.unpack_key(bytes.fromhex(ops[1][1:-1])),
+                self.unpack_key(bytes.fromhex(ops[2][1:-1])),
+                self.unpack_key(bytes.fromhex(ops[3][1:-1])),
+            ]
+        elif not is_input and len(ops) == 5 and ops[0] == "OP_2" and ops[3] == "OP_2" and ops[4] == "OP_CHECKMULTISIG":
+            script["type"] = "2/2-multisig"
+            script["parsed"] = {}
+            script["parsed"]["keys"] = [
+                self.unpack_key(bytes.fromhex(ops[1][1:-1])),
+                self.unpack_key(bytes.fromhex(ops[2][1:-1])),
+            ]
+        elif (
+            not is_coinbase
+            and is_input
+            and len(ops) == 1
+            and ops[0].startswith("<30")
+            and len(ops[0]) in (140, 141, 142, 143, 144, 145, 146)
+        ):
+            script["type"] = "p2pk-sig"
+            script["parsed"] = {}
+            script["parsed"]["signature"] = utils.read_der(Buf(bytes.fromhex(ops[0][1:-1])[:-1]))
+            tmp = bytes.fromhex(ops[0][1:-1])[-1]
+            script["parsed"]["sighash"] = {
+                "anyone-can-pay": tmp >= 0x80,
+                "type": utils.unraw(tmp & 0x7f, 1, {0: "DEFAULT", 1: "ALL", 2: "NONE", 3: "SINGLE"}, True),
+            }
+        elif not is_coinbase and not is_input and len(ops) == 2 and ops[0] == "OP_0" and len(ops[1]) in (42, 66):
+            if len(ops[1]) == 42:
+                script["type"] = "p2wpkh"
+                script["parsed"] = {}
+                script["parsed"]["public-key-hash"] = ops[1][1:-1]
+            else:
+                script["type"] = "p2wsh"
+                script["parsed"] = {}
+                script["parsed"]["script-hash"] = ops[1][1:-1]
+
+            script["parsed"]["address"] = crypto.encode_segwit_address("bc", 0, bytes.fromhex(ops[1][1:-1]), 1)
+        elif not is_coinbase and not is_input and len(ops) == 2 and ops[0] == "OP_1" and len(ops[1]) == 66:
+            script["type"] = "p2tr"
+            script["parsed"] = {}
+            script["parsed"]["taproot-hash"] = ops[1][1:-1]
+            script["parsed"]["address"] = crypto.encode_segwit_address("bc", 1, bytes.fromhex(ops[1][1:-1]), 0x2bc830a3)
+        elif (
+            not is_coinbase
+            and not is_input
+            and len(ops) == 3
+            and ops[0] == "OP_HASH160"
+            and ops[1][0] == "<"
+            and ops[2] == "OP_EQUAL"
+        ):
+            script["type"] = "p2sh"
+            script["parsed"] = {}
+            script["parsed"]["script-hash"] = ops[1][1:-1]
+            script["parsed"]["address"] = utils.b58check_encode(b"\x05" + bytes.fromhex(ops[1][1:-1]))
+        elif len(ops) == 0 and len(segwit_stack) > 0:
+            if len(segwit_stack) == 2 and len(segwit_stack[1]) == 66:
+                script["type"] = "p2wpkh-sig"
+                script["parsed"] = {}
+                script["parsed"]["public-key"] = utils.read_der(Buf(bytes.fromhex(segwit_stack[0])))
+                script["parsed"]["signature"] = self.unpack_key(bytes.fromhex(segwit_stack[1]))
+            elif (len(segwit_stack) == 1 and len(segwit_stack[0]) in (128, 130)) or (
+                len(segwit_stack) == 2 and segwit_stack[1][0] == 0x50 and len(segwit_stack[0]) in (128, 130)
+            ):
+                script["type"] = "p2tr-key-sig"
+                script["parsed"] = {}
+                script["parsed"]["signature"] = bytes.fromhex(segwit_stack[0])[:64].hex()
+                tmp = bytes.fromhex(segwit_stack[0] + "00")[64]
+                script["parsed"]["sighash"] = {
+                    "anyone-can-pay": tmp >= 0x80,
+                    "type": utils.unraw(tmp & 0x7f, 1, {0: "DEFAULT", 1: "ALL", 2: "NONE", 3: "SINGLE"}, True),
+                }
+
+                if len(segwit_stack) == 2:
+                    script["parsed"]["annex-a"] = segwit_stack[1]
+            elif (
+                len(segwit_stack) >= 2
+                and len(segwit_stack[-1]) >= 66
+                and (len(segwit_stack[-1]) % 64 == 2 or (segwit_stack[-1][0] == 0x50 and len(segwit_stack[-2]) % 64 == 2))
+            ):
+                script["type"] = "p2tr-script-sig"
+                script["parsed"] = {}
+
+                segwit_stack = segwit_stack[:]
+
+                if segwit_stack[-1][0] == 0x50:
+                    script["parsed"]["annex-a"] = segwit_stack.pop()
+
+                script["parsed"]["inputs"] = segwit_stack[:-2]
+                script["parsed"]["tapscript"] = self.disassemble_script(bytes.fromhex(segwit_stack[-2]), False, False, [], True)
+                script["parsed"]["control-block"] = segwit_stack[-1]
+            else:
+                script["type"] = "p2wsh-sig"
+                script["parsed"] = {}
+                script["parsed"]["inputs"] = []
+                for i in segwit_stack[:-1]:
+                    try:
+                        if len(i) > 4 and i[:4] == "3045":
+                            script["parsed"]["inputs"].append(utils.read_der(Buf(bytes.fromhex(i))))
+
+                        if (len(i) == 130 and i[:2] == "04") or (len(i) == 66 and i[:2] in ("02", "03")):
+                            script["parsed"]["inputs"].append(self.unpack_key(bytes.fromhex(i)))
+                    except Exception:
+                        script["parsed"]["inputs"].append(i)
+
+                script["parsed"]["script"] = self.disassemble_script(bytes.fromhex(segwit_stack[-1]), False, False, [])
 
         return script
 

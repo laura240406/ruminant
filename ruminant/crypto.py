@@ -569,9 +569,9 @@ def bech32_verify_checksum(data: str) -> bool:
     return bech32_polymod(bech32_hrp_expand(hrp) + data_list) == 1
 
 
-def bech32_create_checksum(hrp: str, data: list[int]) -> list[int]:
+def bech32_create_checksum(hrp: str, data: list[int], xor: int = 1) -> list[int]:
     values = bech32_hrp_expand(hrp) + data
-    polymod = bech32_polymod(values + [0, 0, 0, 0, 0, 0]) ^ 1
+    polymod = bech32_polymod(values + [0, 0, 0, 0, 0, 0]) ^ xor
     return [(polymod >> 5 * (5 - i)) & 31 for i in range(6)]
 
 
@@ -590,6 +590,14 @@ def bech32_convertbits(data: list[int] | bytes, frombits: int, tobits: int, pad:
         if bits:
             ret.append((acc << (tobits - bits)) & maxv)
     return ret
+
+
+def encode_segwit_address(hrp: str, witness_version: int, witness_program: bytes, xor: int) -> str:
+    prog_words = bech32_convertbits(witness_program, 8, 5)
+    data_words = [witness_version] + prog_words
+    combined = data_words + bech32_create_checksum(hrp, data_words, xor)
+    charset = "qpzry9x8gf2tvdw0s3jn54khce6mua7l"
+    return hrp + "1" + "".join([charset[d] for d in combined])
 
 
 def curve25519(base: bytes, scalar: bytes) -> bytes:
