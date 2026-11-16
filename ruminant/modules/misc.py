@@ -2471,9 +2471,13 @@ class BitcoinBlockModule(module.RuminantModule):
             self.buf.seek(base)
             self.buf.resetunit()
 
+            tmp = self.buf.read(4)
+            self.buf.skip(2)
             tx["txid"] = (
                 hashlib
-                .sha256(hashlib.sha256(self.buf.read(wit_offset - base) + tx["locktime"].to_bytes(4, "little")).digest())
+                .sha256(
+                    hashlib.sha256(tmp + self.buf.read(wit_offset - base - 6) + tx["locktime"].to_bytes(4, "little")).digest()
+                )
                 .digest()[::-1]
                 .hex()
             )
