@@ -128,6 +128,7 @@ Ruminant is still in early alpha but it can already process the following file t
 * The Powder Toy saves and stamps
 * Contents of EU Digital and CTIE COVID Certificate QR codes
 * Bitcoin blocks
+  * decodes Coinbase/P2PK/P2PKH/P2SH/Multisig/P2WPKH/P2WSH/P2TR transactions
 
 ## Video codecs
 Ruminant can extract and parse data units of specific codecs from specific containers.
