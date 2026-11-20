@@ -986,11 +986,11 @@ class EfiSignatureListModule(module.RuminantModule):
 
 @module.register
 class BitcoinBlockModule(module.RuminantModule):
-    desc = "Bitcoin block files. Run your node with blocksxor=0 or decrypt manually."
+    desc = "Bitcoin/Litecoin block files. Run your node with blocksxor=0 or decrypt manually."
 
     @staticmethod
     def identify(buf: Buf, ctx={}) -> bool:
-        return buf.peek(4) == b"\xf9\xbe\xb4\xd9"
+        return buf.peek(4) in (b"\xf9\xbe\xb4\xd9", b"\xfb\xc0\xb6\xdb")
 
     def read_cpi(self) -> int:
         tmp = self.buf.ru8()
@@ -1375,7 +1375,11 @@ class BitcoinBlockModule(module.RuminantModule):
             script["type"] = "p2pkh"
             script["parsed"] = {}
             script["parsed"]["public-key-hash"] = ops[2][1:-1]
-            script["parsed"]["address"] = utils.b58check_encode(b"\x00" + bytes.fromhex(ops[2][1:-1]))
+
+            if self.mode == "btc":
+                script["parsed"]["address"] = utils.b58check_encode(b"\x00" + bytes.fromhex(ops[2][1:-1]))
+            elif self.mode == "ltc":
+                script["parsed"]["address"] = utils.b58check_encode(b"\x30" + bytes.fromhex(ops[2][1:-1]))
         elif not is_coinbase and is_input and len(ops) == 2 and len(ops[1]) in (68, 132) and ops[0][:3] == "<30":
             script["type"] = "p2pkh-sig"
             script["parsed"] = {}
@@ -1421,12 +1425,19 @@ class BitcoinBlockModule(module.RuminantModule):
                 script["parsed"] = {}
                 script["parsed"]["script-hash"] = ops[1][1:-1]
 
-            script["parsed"]["address"] = crypto.encode_segwit_address("bc", 0, bytes.fromhex(ops[1][1:-1]), 1)
+            if self.mode == "btc":
+                script["parsed"]["address"] = crypto.encode_segwit_address("bc", 0, bytes.fromhex(ops[1][1:-1]), 1)
+            elif self.mode == "ltc":
+                script["parsed"]["address"] = crypto.encode_segwit_address("ltc", 0, bytes.fromhex(ops[1][1:-1]), 1)
         elif not is_coinbase and not is_input and len(ops) == 2 and ops[0] == "OP_1" and len(ops[1]) == 66:
             script["type"] = "p2tr"
             script["parsed"] = {}
             script["parsed"]["taproot-hash"] = ops[1][1:-1]
-            script["parsed"]["address"] = crypto.encode_segwit_address("bc", 1, bytes.fromhex(ops[1][1:-1]), 0x2bc830a3)
+
+            if self.mode == "btc":
+                script["parsed"]["address"] = crypto.encode_segwit_address("bc", 1, bytes.fromhex(ops[1][1:-1]), 0x2bc830a3)
+            elif self.mode == "ltc":
+                script["parsed"]["address"] = crypto.encode_segwit_address("ltc", 1, bytes.fromhex(ops[1][1:-1]), 0x2bc830a3)
         elif (
             not is_coinbase
             and not is_input
@@ -1438,7 +1449,11 @@ class BitcoinBlockModule(module.RuminantModule):
             script["type"] = "p2sh"
             script["parsed"] = {}
             script["parsed"]["script-hash"] = ops[1][1:-1]
-            script["parsed"]["address"] = utils.b58check_encode(b"\x05" + bytes.fromhex(ops[1][1:-1]))
+
+            if self.mode == "btc":
+                script["parsed"]["address"] = utils.b58check_encode(b"\x05" + bytes.fromhex(ops[1][1:-1]))
+            elif self.mode == "ltc":
+                script["parsed"]["address"] = utils.b58check_encode(b"\x32" + bytes.fromhex(ops[1][1:-1]))
         elif (
             len(ops) >= 5
             and ops[1] == "OP_CHECKSIG"
@@ -1496,6 +1511,14 @@ class BitcoinBlockModule(module.RuminantModule):
                     body += bytes.fromhex(op[1:-1])
 
                 script["parsed"]["body"] = chew(body)
+        elif not is_coinbase and not is_input and len(ops) == 2 and ops[0] == "OP_8" and ops[1][0] == "<":
+            script["type"] = "hogex-commitment"
+            script["parsed"] = {}
+            script["parsed"]["hash"] = ops[1][1:-1]
+        elif not is_coinbase and not is_input and len(ops) == 2 and ops[0] == "OP_9" and ops[1][0] == "<":
+            script["type"] = "hogex-peg-in"
+            script["parsed"] = {}
+            script["parsed"]["mw-output-id"] = ops[1][1:-1]
         elif len(ops) == 0 and len(segwit_stack) > 0:
             if len(segwit_stack) == 2 and segwit_stack[0].startswith("30") and len(segwit_stack[1]) == 66:
                 script["type"] = "p2wpkh-sig"
@@ -1555,9 +1578,14 @@ class BitcoinBlockModule(module.RuminantModule):
 
     def chew(self) -> ruminant_types.JSON:
         meta: dict = {}
-        meta["type"] = "bitcoin-block"
 
-        self.buf.skip(4)
+        match self.buf.rh(4):
+            case "f9beb4d9":
+                self.mode = "btc"
+                meta["type"] = "bitcoin-block"
+            case "fbc0b6db":
+                self.mode = "ltc"
+                meta["type"] = "litecoin-block"
 
         meta["length"] = self.buf.ru32l()
         self.buf.pasunit(meta["length"])
@@ -1574,9 +1602,15 @@ class BitcoinBlockModule(module.RuminantModule):
         meta["header"]["nonce"] = self.buf.ru32l()
 
         meta["header"]["id"] = hashlib.sha256(hashlib.sha256(hdr).digest()).digest()[::-1].hex()
-        meta["header"]["is-below-difficulty"] = int.from_bytes(
-            hashlib.sha256(hashlib.sha256(hdr).digest()).digest(), "little"
-        ) < int(meta["header"]["difficulty"], 16)
+
+        if self.mode == "btc":
+            meta["header"]["is-below-difficulty"] = int.from_bytes(
+                hashlib.sha256(hashlib.sha256(hdr).digest()).digest(), "little"
+            ) < int(meta["header"]["difficulty"], 16)
+        elif self.mode == "ltc":
+            h = hashlib.scrypt(password=hdr, salt=hdr, n=1024, r=1, p=1, dklen=32, maxmem=2 * 1024 * 1024)
+            meta["header"]["pow-hash"] = h[::-1].hex()
+            meta["header"]["is-below-difficulty"] = int.from_bytes(h, "little") < int(meta["header"]["difficulty"], 16)
 
         meta["transaction-count"] = self.read_cpi()
         meta["transactions"] = []

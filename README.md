@@ -127,8 +127,8 @@ Ruminant is still in early alpha but it can already process the following file t
 * 3DS OTP dumps
 * The Powder Toy saves and stamps
 * Contents of EU Digital and CTIE COVID Certificate QR codes
-* Bitcoin blocks
-  * decodes Coinbase/P2PK/P2PKH/P2SH/Multisig/P2WPKH/P2WSH/P2TR transactions
+* Bitcoin/Litecoin blocks
+  * decodes Coinbase/P2PK/P2PKH/P2SH/Multisig/P2WPKH/P2WSH/P2TR/MW transactions
   * decodes ordinals
 
 ## Video codecs
