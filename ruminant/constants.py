@@ -488,6 +488,7 @@ PGP_PUBLIC_KEYS = {
     1: "RSA (Encrypt or Sign)",
     2: "RSA (Encrypt-only)",
     3: "RSA (Sign-only)",
+    8: "Kyber",
     16: "ElGamal",
     17: "DSA",
     18: "ECDH",

@@ -1001,6 +1001,13 @@ def _read_pgp(buf, fake=None):
                     algorithm = buf.ru8()
 
                     data["algorithm"] = unraw(algorithm, 1, PGP_PUBLIC_KEYS, True)
+                case 5:
+                    # https://datatracker.ietf.org/doc/draft-ietf-openpgp-rfc4880bis/
+                    data["created-at"] = datetime.fromtimestamp(buf.ru32(), timezone.utc).isoformat()
+                    algorithm = buf.ru8()
+
+                    data["algorithm"] = unraw(algorithm, 1, PGP_PUBLIC_KEYS, True)
+                    data["key-length"] = buf.ru32()
                 case 6:
                     data["created-at"] = datetime.fromtimestamp(buf.ru32(), timezone.utc).isoformat()
                     algorithm = buf.ru8()
@@ -1013,6 +1020,9 @@ def _read_pgp(buf, fake=None):
             match algorithm:
                 case 0x01 | 0x02 | 0x03:
                     data["key"] = {"n": read_pgp_mpi(buf), "e": read_pgp_mpi(buf)}
+                case 0x08:
+                    data["key"] = {"oid": read_oid(buf, buf.ru8() - 1), "point": read_pgp_mpi(buf), "kyber-length": buf.ru32()}
+                    data["key"]["kyber"] = buf.rh(data["key"]["kyber-length"])
                 case 0x10:
                     data["key"] = {
                         "p": read_pgp_mpi(buf),
