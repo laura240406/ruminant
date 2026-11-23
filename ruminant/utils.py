@@ -1113,8 +1113,13 @@ def _read_pgp(buf, fake=None):
 
             match data["format"]:
                 case "t" | "b":
-                    data["filename"] = buf.rs(buf.ru8())
-                    data["content"] = buf.rs(buf.unit)
+                    try:
+                        bak = buf.backup()
+                        data["filename"] = buf.rs(buf.ru8())
+                        data["content"] = buf.rs(buf.unit)
+                    except UnitException:
+                        buf.restore(bak)
+                        data["content"] = buf.rh(buf.unit)
                 case "\x00":
                     content = buf.read(min(buf.unit, buf.available()))
 
