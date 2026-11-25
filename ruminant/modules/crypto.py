@@ -1647,7 +1647,8 @@ class AesCryptModule(module.RuminantModule):
         meta["version"] = self.buf.ru8()
 
         match meta["version"]:
-            case 0x02:
+            case 0x02 | 0x03:
+                v3 = meta["version"] == 0x03
                 meta["reserved"] = self.buf.ru8()
 
                 meta["extensions"] = []
@@ -1673,6 +1674,9 @@ class AesCryptModule(module.RuminantModule):
                     if ex["identifier"]:
                         meta["extensions"].append(ex)
 
+                if v3:
+                    meta["kdf-iters"] = self.buf.ru32()
+
                 meta["wrap-iv"] = self.buf.rh(16)
                 meta["wrapped-iv"] = self.buf.rh(16)
                 meta["wrapped-key"] = self.buf.rh(32)
@@ -1680,9 +1684,20 @@ class AesCryptModule(module.RuminantModule):
 
                 password = secrets.get_parameter(None, meta, "password", meta["wrap-hmac"])
                 if password is not None:
-                    wrap_key = self.stretch(cast(str, password), bytes.fromhex(meta["wrap-iv"]))
+                    if v3:
+                        wrap_key = hashlib.pbkdf2_hmac(
+                            "sha512",
+                            cast(str, password).encode("utf8"),
+                            bytes.fromhex(meta["wrap-iv"]),
+                            meta["kdf-iters"],
+                            dklen=32,
+                        )
+                    else:
+                        wrap_key = self.stretch(cast(str, password), bytes.fromhex(meta["wrap-iv"]))
                     blob = bytes.fromhex(meta["wrapped-iv"] + meta["wrapped-key"])
-                    meta["password"]["correct"] = hmac.new(wrap_key, blob, hashlib.sha256).hexdigest() == meta["wrap-hmac"]
+                    meta["password"]["correct"] = (
+                        hmac.new(wrap_key, blob + (b"\x03" if v3 else b""), hashlib.sha256).hexdigest() == meta["wrap-hmac"]
+                    )
 
                     if meta["password"]["correct"]:
                         blob = crypto.aes_cbc(wrap_key, bytes.fromhex(meta["wrap-iv"]), blob)
@@ -1691,7 +1706,11 @@ class AesCryptModule(module.RuminantModule):
 
                         base = self.buf.tell()
                         fd = utils.tempfd()
-                        remaining = self.buf.available() - 33 - 16
+                        remaining = self.buf.available() - 32 - 16
+
+                        if not v3:
+                            remaining -= 1
+
                         assert not remaining % 16, "File is corrupted"
 
                         while remaining:
@@ -1702,9 +1721,13 @@ class AesCryptModule(module.RuminantModule):
                             fd.write(crypto.aes_cbc(key, iv, block))
                             iv = block[-16:]
 
-                        block = crypto.aes_cbc(key, iv, self.buf.read(16))
-                        length = self.buf.tell() - base
-                        fd.write(block[: self.buf.ru8()])
+                        if v3:
+                            fd.write(crypto.aes_cbc_pkcs7(key, iv, self.buf.read(16)))
+                            length = self.buf.tell() - base
+                        else:
+                            block = crypto.aes_cbc(key, iv, self.buf.read(16))
+                            length = self.buf.tell() - base
+                            fd.write(block[: self.buf.ru8()])
 
                         with self.buf:
                             self.buf.seek(base)
