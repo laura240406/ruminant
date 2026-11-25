@@ -130,6 +130,7 @@ Ruminant is still in early alpha but it can already process the following file t
 * Bitcoin/Litecoin blocks
   * decodes Coinbase/P2PK/P2PKH/P2SH/Multisig/P2WPKH/P2WSH/P2TR/MW transactions
   * decodes ordinals
+* AES Crypt v2 files
 
 ## Video codecs
 Ruminant can extract and parse data units of specific codecs from specific containers.

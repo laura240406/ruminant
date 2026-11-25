@@ -1620,3 +1620,115 @@ class BitcoinBlockModule(module.RuminantModule):
         self.buf.sapunit()
 
         return meta
+
+
+@module.register
+class AesCryptModule(module.RuminantModule):
+    desc = "AES Crypt files."
+
+    @staticmethod
+    def identify(buf: Buf, ctx={}) -> bool:
+        return buf.peek(3) == b"AES"
+
+    def stretch(self, pwd: str, iv: bytes) -> bytes:
+        pwd_bytes = pwd.encode("utf-16-le")
+        digest = iv + bytes(16)
+
+        for _ in range(8192):
+            digest = hashlib.sha256(digest + pwd_bytes).digest()
+
+        return digest
+
+    def chew(self) -> ruminant_types.JSON:
+        meta: dict = {}
+        meta["type"] = "aes-crypt"
+
+        self.buf.skip(3)
+        meta["version"] = self.buf.ru8()
+
+        match meta["version"]:
+            case 0x02:
+                meta["reserved"] = self.buf.ru8()
+
+                meta["extensions"] = []
+                while True:
+                    ex_length = self.buf.ru16()
+                    if ex_length == 0:
+                        break
+
+                    self.buf.pasunit(ex_length)
+
+                    ex = {}
+                    ex["identifier"] = self.buf.rzs()
+
+                    match ex["identifier"]:
+                        case "CREATED_BY":
+                            ex["value"] = self.buf.rs(self.buf.unit)
+                        case _:
+                            ex["value"] = self.buf.rh(self.buf.unit)
+                            ex["unknown"] = True
+
+                    self.buf.sapunit()
+
+                    if ex["identifier"]:
+                        meta["extensions"].append(ex)
+
+                meta["wrap-iv"] = self.buf.rh(16)
+                meta["wrapped-iv"] = self.buf.rh(16)
+                meta["wrapped-key"] = self.buf.rh(32)
+                meta["wrap-hmac"] = self.buf.rh(32)
+
+                password = secrets.get_parameter(None, meta, "password", meta["wrap-hmac"])
+                if password is not None:
+                    wrap_key = self.stretch(cast(str, password), bytes.fromhex(meta["wrap-iv"]))
+                    blob = bytes.fromhex(meta["wrapped-iv"] + meta["wrapped-key"])
+                    meta["password"]["correct"] = hmac.new(wrap_key, blob, hashlib.sha256).hexdigest() == meta["wrap-hmac"]
+
+                    if meta["password"]["correct"]:
+                        blob = crypto.aes_cbc(wrap_key, bytes.fromhex(meta["wrap-iv"]), blob)
+                        iv = blob[:16]
+                        key = blob[16:]
+
+                        base = self.buf.tell()
+                        fd = utils.tempfd()
+                        remaining = self.buf.available() - 33 - 16
+                        assert not remaining % 16, "File is corrupted"
+
+                        while remaining:
+                            block_size = min(remaining, 2**24)
+                            remaining -= block_size
+                            block = self.buf.read(block_size)
+
+                            fd.write(crypto.aes_cbc(key, iv, block))
+                            iv = block[-16:]
+
+                        block = crypto.aes_cbc(key, iv, self.buf.read(16))
+                        length = self.buf.tell() - base
+                        fd.write(block[: self.buf.ru8()])
+
+                        with self.buf:
+                            self.buf.seek(base)
+                            self.buf.setunit(length)
+
+                            mac = hmac.new(key, digestmod=hashlib.sha256)
+                            while True:
+                                block = self.buf.read(min(cast(int, self.buf.unit), 2**24))
+                                if len(block) == 0:
+                                    break
+
+                                mac.update(block)
+
+                        meta["footer-mac"] = {"raw": self.buf.rh(32)}
+                        meta["footer-mac"]["correct"] = meta["footer-mac"]["raw"] == mac.hexdigest()
+
+                        if not meta["footer-mac"]["correct"]:
+                            meta["footer-mac"]["actual"] = mac.hexdigest()
+
+                        fd.seek(0)
+                        meta["blob"] = chew(fd)
+            case _:
+                meta["unknown"] = True
+
+        self.buf.skip(self.buf.available())
+
+        return meta

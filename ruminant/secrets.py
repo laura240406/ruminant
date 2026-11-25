@@ -15,13 +15,18 @@ def set(name: str, value: ruminant_types.JSON) -> None:
     parameters[name] = value
 
 
-def get_parameter(default=None, register_dict=None, register_name=None) -> ruminant_types.JSON:
+def get_parameter(default=None, register_dict=None, register_name=None, parameter_index=None) -> ruminant_types.JSON:
     state: dict = cast(dict, state_stack.get())
     parameters = state["parameters"]
-    parameter_index = state["parameter-index"]
+
+    has_custom_index = parameter_index is None
+    if has_custom_index:
+        parameter_index = state["parameter-index"]
 
     if register_dict is not None:
         register_dict[register_name] = {"parameter-index": parameter_index, "found": str(parameter_index) in parameters}
 
-    state["parameter-index"] += 1
+    if not has_custom_index:
+        state["parameter-index"] += 1
+
     return parameters.get(str(parameter_index), default)
