@@ -1611,7 +1611,10 @@ class CabinetModule(module.RuminantModule):
 
                             while fd.available() > 0:
                                 assert fd.read(2) == b"CK", "invalid MSZIP chunk padding"
-                                utils.stream_deflate(fd, fd2, fd.available(), revert=True)
+
+                                fd2.seek(max(fd2.tell() - 32768, 0))
+                                context = fd2.read(32768)
+                                utils.stream_deflate(fd, fd2, fd.available(), revert=True, context=context)
 
                             fd.close()
                             fd = Buf(fd2)
